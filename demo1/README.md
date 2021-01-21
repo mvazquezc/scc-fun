@@ -1,3 +1,9 @@
+# SCCs Priorities
+
+In this demo we are going to show a basic scenario of SCCs prioritization that will help you understand how SCCs are ordered and prioritized.
+
+## Hands-on Demo
+
 1. Create a namespace for running the demo
 
     ~~~sh
