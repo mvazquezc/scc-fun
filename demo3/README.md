@@ -107,9 +107,6 @@ We can also drop capabilities not needed by our application, that way we are red
 
 Now it's time to see how capabilities can be managed on OpenShift.
 
-
-Before we start, it is worth mentioning that there is an [issue](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
-
 ### Hands-on Demo 1
 
 In this demo we are going to see how we can drop all capabilities but NET_BIND_SERVICE on the pod running our application.
@@ -142,6 +139,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
 
 4. We are going to create our own SCC based on the restricted one, and on top of that we need out container to run with with `anyuid` (due to the issue mentioned earlier) and we want to be able to use `NET_BIND_SERVICE` capability.
 
+    > **NOTE**: We removed `system:authenticated` group so we will need to assign the SCC manually to our SAs/Users/Groups.
     ~~~sh
     cat <<EOF | oc create -f -
     kind: SecurityContextConstraints
@@ -181,9 +179,13 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     defaultAddCapabilities: null
     fsGroup:
       type: MustRunAs
-    groups:
-    - system:authenticated
+    groups: []
     EOF
+    ~~~
+5. We're grating use privileges of this new SCC to the SA test-user
+
+    ~~~sh
+    oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:testuser
     ~~~
 5. On top of the SCC caps we can drop/add (add will depend on the SCC settings) capabilities on a given pod:
 
@@ -200,7 +202,6 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
       - image: quay.io/mavazque/reversewords:latest
         name: reversewords
         securityContext:
-          runAsUser: 0
           capabilities:
             drop:
             - NET_BIND_SERVICE
@@ -209,7 +210,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     status: {}
     EOF
     ~~~
-4. Same as before, since we're not binding to a privileged port, the application will start with no issues, let's see what happens if we create the pod with a binding to port 80:
+4. Since we're not binding to a privileged port, the application will start with no issues. On top of that the pod started with the `restricted` SCC since it didn't need any extra config provided by our new SCC. Now, let's see what happens if we create the pod with a binding to port 80:
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -260,7 +261,6 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
         - name: APP_PORT
           value: "80"
         securityContext:
-          #runAsUser: 0
           capabilities:
             drop:
             - all
@@ -291,7 +291,6 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
         command: ["chown", "-v", "nobody", "/etc/resolv.conf"]
         name: centos
         securityContext:
-          runAsUser: 0
           capabilities:
             drop:
             - all
