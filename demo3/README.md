@@ -107,6 +107,8 @@ We can also drop capabilities not needed by our application, that way we are red
 
 Now it's time to see how capabilities can be managed on OpenShift.
 
+Before we start, it is worth mentioning that there is an [issue](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
+
 ### Hands-on Demo 1
 
 In this demo we are going to see how we can drop all capabilities but NET_BIND_SERVICE on the pod running our application.
@@ -227,7 +229,6 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
         - name: APP_PORT
           value: "80"
         securityContext:
-          runAsUser: 0
           capabilities:
             drop:
             - NET_BIND_SERVICE
@@ -261,6 +262,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
         - name: APP_PORT
           value: "80"
         securityContext:
+          runAsUser: 0
           capabilities:
             drop:
             - all
@@ -325,6 +327,7 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
         command: ["chown", "-v", "nobody", "/etc/resolv.conf"]
         name: centos
         securityContext:
+          runAsUser: 0
           capabilities:
             drop:
             - all
