@@ -107,7 +107,7 @@ We can also drop capabilities not needed by our application, that way we are red
 
 Now it's time to see how capabilities can be managed on OpenShift.
 
-Before we start, it is worth mentioning that there is an [issue](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
+Before we start, it is worth mentioning that there is a [limitation](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
 
 ### Hands-on Demo 1
 
@@ -342,4 +342,189 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
 
     ~~~
     changed ownership of '/etc/resolv.conf' from root to nobody
+    ~~~
+
+### Hands-on Demo 3
+
+In this demo we are going to deploy the application from Demo 1, but this time using a deployment. We will see how we assign an SCC to a workload in a more realistic scenario. Remember: users do not usually create pods manually.
+
+1. We will create the deployment for our app:
+
+    >**NOTE**: As you can see we're using the `default` SA for running our deployment.
+
+    ~~~sh
+    cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: reversewords-app-captest
+      name: reversewords-app-captest
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: reversewords-app-captest
+      strategy: {}
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app: reversewords-app-captest
+        spec:
+          serviceAccountName: default
+          containers:
+          - image: quay.io/mavazque/reversewords:latest
+            name: reversewords
+            resources: {}
+            env:
+            - name: APP_PORT
+              value: "80"
+            securityContext:
+              runAsUser: 0
+              capabilities:
+                drop:
+                - all
+                add:
+                - NET_BIND_SERVICE
+    status: {}
+    EOF
+    ~~~
+2. No pods were created, but why? - Let's check the deployment status:
+
+    ~~~sh
+    oc -n ${NAMESPACE} get deployment reversewords-app-captest -o yaml -o jsonpath='{.status.conditions[*]}' | jq
+    ~~~
+
+    1. The deployment couldn't use the SCC `restricted-netbind` because the ServiceAccount `default` used by the deployment doesn't have access to it.
+
+        ~~~json
+        {
+          "lastTransitionTime": "2021-01-29T09:15:15Z",
+          "lastUpdateTime": "2021-01-29T09:15:15Z",
+          "message": "pods \"reversewords-app-captest-7646fc5646-\" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000650000, 1000659999] spec.containers[0].securityContext.capabilities.add: Invalid value: \"NET_BIND_SERVICE\": capability may not be added spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000650000, 1000659999] spec.containers[0].securityContext.capabilities.add: Invalid value: \"NET_BIND_SERVICE\": capability may not be added]",
+          "reason": "FailedCreate",
+          "status": "True",
+          "type": "ReplicaFailure"
+        }
+        ~~~
+      2. At this point you might think that giving access to the `default` SA to the SCC `restricted-netbind` will solve the issue. And that's right, but there is a better way.
+3. Let's create a new SA for running our application:
+
+    ~~~sh
+    oc -n ${NAMESPACE} create sa reverse-words-app
+    ~~~
+4. Now, it's time to give it access to the `restricted-netbind` SCC:
+
+    ~~~sh
+    oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:reverse-words-app
+    ~~~
+5. Finally, patch the deployment so it uses the new SA we created:
+
+    ~~~sh
+    oc -n ${NAMESPACE} patch deployment reversewords-app-captest -p '{"spec":{"template":{"spec":{"serviceAccountName":"reverse-words-app"}}}}' --type merge
+    ~~~
+6. The deployment will run our container now:
+
+    ~~~sh
+    oc -n ${NAMESPACE} get deployment reversewords-app-captest
+    ~~~
+
+    ~~~
+    NAME                       READY   UP-TO-DATE   AVAILABLE   AGE
+    reversewords-app-captest   1/1     1            1           3m
+    ~~~
+
+
+### Hands-on Demo 4
+
+In this demo we are going tu use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as base.
+
+1. Build the following Dockerfile
+
+    ~~~sh
+    cat <<EOF > /tmp/reversewords.dockerfile
+    FROM registry.access.redhat.com/ubi8:latest
+    ENV GOPATH=/go
+    RUN mkdir -p /go
+    RUN dnf install golang git -y
+    RUN go get github.com/gorilla/mux && go get github.com/prometheus/client_golang/prometheus/promhttp && go get github.com/mvazquezc/reverse-words
+    WORKDIR /go/src/github.com/mvazquezc/reverse-words/
+    RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /usr/bin/reverse-words .
+    RUN rm -rf /go && dnf clean all
+    # Add CAP_NET_BIND capability to our binary
+    RUN setcap 'cap_net_bind_service+ep' /usr/bin/reverse-words
+    EXPOSE 80
+    CMD ["/usr/bin/reverse-words"]
+    EOF
+    ~~~
+
+    ~~~sh
+    QUAY_USER=<your_user>
+    podman build -f /tmp/reversewords.dockerfile -t quay.io/${QUAY_USER}/reversewords-captest:latest
+    ~~~
+2. Once the image is built, push it to your favorite registry. In this example we're using quay.io but you can use one of your choice.
+
+    ~~~sh
+    podman push quay.io/${QUAY_USER}/reversewords-captest:latest
+    ~~~
+3. Let's create a deployment for the application
+
+    >**NOTE**: As you can see we're using the `default` SA for running our deployment, we are not running as UID 0 and we're dropping all capabilities.
+
+    ~~~sh
+    APP_IMAGE=quay.io/${QUAY_USER}/reversewords-captest:latest
+    cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: reversewords-app-filecaptest
+      name: reversewords-app-filecaptest
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: reversewords-app-filecaptest
+      strategy: {}
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app: reversewords-app-filecaptest
+        spec:
+          serviceAccountName: default
+          containers:
+          - image: ${APP_IMAGE}
+            name: reversewords
+            resources: {}
+            env:
+            - name: APP_PORT
+              value: "80"
+            securityContext:
+              capabilities:
+                drop:
+                - all
+    status: {}
+    EOF
+    ~~~
+4. The pod is running and it binded to the port 80 eventhough it's running under `restricted` SCC
+
+    ~~~sh
+    oc -n ${NAMESPACE} get pod -l app=reversewords-app-filecaptest -o yaml | grep scc
+    ~~~
+
+    ~~~
+    openshift.io/scc: restricted
+    ~~~
+
+    ~~~sh
+    oc -n ${NAMESPACE} logs -l app=reversewords-app-filecaptest
+    ~~~
+
+    ~~~
+    2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet
+    2021/01/29 16:58:28 Listening on port 80
     ~~~
