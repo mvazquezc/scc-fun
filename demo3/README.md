@@ -1,14 +1,14 @@
-# Linux Capabilities
+# **Linux Capabilities**
 
 In this demo we will learn how we can work with capabilities inside our containers.
 
 We will start by restricting the set of capabilities available in a local container with podman, and then we will see how we can manage capabilities for pods running on OpenShift.
 
-## Managing Capabilities with Podman
+## **Managing Capabilities with Podman**
 
 We will see how we can add/drop capabilities in a given container using Podman and the implications of doing so.
 
-### Hands-on Demo
+### **Hands-on Demo**
 
 1. Install podman on your system in case you don't have it yet.
 2. Let's run an nginx container and see which capabilities are added to the container.
@@ -103,13 +103,15 @@ We can also drop capabilities not needed by our application, that way we are red
     2021/01/19 16:14:34 Listening on port 80
     ~~~
 
-## Managing Capabilities on OpenShift
+## **Managing Capabilities on OpenShift**
 
 Now it's time to see how capabilities can be managed on OpenShift.
 
 Before we start, it is worth mentioning that there is a [limitation](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
 
-### Hands-on Demo 1
+There are tools such as [capabilities_tracker](https://github.com/clustership/capabilities_tracker/blob/master/OPENSHIFT_USAGE.md) which can help you to understand which capabilities are being used by your apps.
+
+### **Hands-on Demo 1**
 
 In this demo we are going to see how we can drop all capabilities but NET_BIND_SERVICE on the pod running our application.
 
@@ -274,7 +276,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     EOF
     ~~~
 
-### Hands-on Demo 2
+### **Hands-on Demo 2**
 
 In this demo we need an SCC so we can run a pod that changes the ownership of the `/etc/resolv.conf` file to `nobody` user. The information we have is that `CHOWN` capability will be required for `chown` to work.
 
@@ -344,7 +346,7 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
     changed ownership of '/etc/resolv.conf' from root to nobody
     ~~~
 
-### Hands-on Demo 3
+### **Hands-on Demo 3**
 
 In this demo we are going to deploy the application from Demo 1, but this time using a deployment. We will see how we assign an SCC to a workload in a more realistic scenario. Remember: users do not usually create pods manually.
 
@@ -436,8 +438,7 @@ In this demo we are going to deploy the application from Demo 1, but this time u
     reversewords-app-captest   1/1     1            1           3m
     ~~~
 
-
-### Hands-on Demo 4
+### **Hands-on Demo 4**
 
 In this demo we are going tu use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as base.
 
@@ -528,3 +529,5 @@ In this demo we are going tu use file capabilities to see how we can grant capab
     2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet
     2021/01/29 16:58:28 Listening on port 80
     ~~~
+
+
