@@ -11,20 +11,24 @@ In order to generate our `seccomp` profile we are going to rely on an OCI Hook w
 
 The OCI Hook project can be found here: https://github.com/containers/oci-seccomp-bpf-hook
 
-1. Create a VM with Fedora33 to run our tests. I'm using [kcli](https://github.com/karmab/kcli).
+1. Create a VM with Centos 8 Streams to run our tests. I'm using [kcli](https://github.com/karmab/kcli).
 
     ~~~sh
-    kcli create vm -i fedora33 -P numcpus=2 -P memory=4096
+    kcli create vm -i centos8stream -P numcpus=2 -P memory=4096
     ~~~
-2. Install `podman` and the `oci-seccomp-bpf-hook`
+2. Connect to the VM and install `podman` and the `oci-seccomp-bpf-hook`
 
+    > **NOTE**: We need to install kernel-core to get the `kheaders` module required by the hook.
     ~~~sh
-    sudo dnf install -y podman oci-seccomp-bpf-hook jq
+    # Install required tools
+    sudo dnf install -y podman oci-seccomp-bpf-hook jq kernel-core kernel-headers
+    # Reboot the VM
+    sudo reboot
     ~~~
-3. Podman will use `runc` runtime since current `crun` shipped with Fedora33 doesn't support CGroupsV2, OpenShift uses `crun`, since we want to generate the seccomp profile for OpenShift we need to install a recent version of `crun` that works wtih CGroupsV2:
+3. After reboot, load the `kheaders` module.
 
     ~~~sh
-    sudo dnf install -y https://rpmfind.net/linux/centos/8-stream/AppStream/x86_64/os/Packages/runc-1.0.0-69.rc92.module_el8.4.0+641+6116a774.x86_64.rpm
+    sudo modprobe kheaders
     ~~~
 4. Let's run a test container that runs an ls command
 
