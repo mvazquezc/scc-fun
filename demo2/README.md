@@ -389,7 +389,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     EOF
     ~~~
 
-    >**NOTE**: Es expected, the profile blocks the execution.
+    >**NOTE**: As expected, the profile blocks the execution.
     ~~~sh
     oc -n ${NAMESPACE} logs seccomp-ping-test
     
