@@ -319,6 +319,9 @@ We have a workload that requires running with a given UID (1024). We create the 
 
 **Solution**
 
+<details>
+  <summary>Click here to see solution</summary>
+  
   1. Check deployment status
 
       ~~~sh
