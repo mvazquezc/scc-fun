@@ -19,3 +19,9 @@ Seccomp profiles, learn how to create your own seccomp profiles and use them on 
 Capabilities, learn what they are and how you can allow/restrict their use on OpenShift.
 
 [Start Here](./demo3/README.md)
+
+## **Demo 4**
+
+Debugging SCCs Issues, apply your knowledge around SCCs to solve some issues related to SCCs.
+
+[Start Here](./demo4/README.md)
