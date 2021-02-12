@@ -85,7 +85,7 @@ We can also drop capabilities not needed by our application, that way we are red
     podman run --rm --name reverse-words-app-80 --cap-drop=all -e APP_PORT=80 quay.io/mavazque/reversewords:latest
     ~~~
 
-    1. The container failed to start because it couldn't bind port 80:
+    1. The container failed to start because it couldn't bind port 80 to the container namespace. It required higher permissions:
       
         ~~~
         2021/01/19 16:12:53 Starting Reverse Api v0.0.17 Release: NotSet
@@ -141,7 +141,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     - SETGID
     ~~~
 
-4. We are going to create our own SCC based on the restricted one, and on top of that we need out container to run with with `anyuid` (due to the issue mentioned earlier) and we want to be able to use `NET_BIND_SERVICE` capability.
+4. We are going to create our own SCC based on the restricted one, and on top of that, we need our container to run with `anyuid` (due to the issue mentioned earlier) and we want to be able to use `NET_BIND_SERVICE` capability.
 
     > **NOTE**: We removed `system:authenticated` group so we will need to assign the SCC manually to our SAs/Users/Groups.
     ~~~sh
@@ -186,7 +186,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     groups: []
     EOF
     ~~~
-5. We're grating use privileges of this new SCC to the SA test-user
+5. We're giving access to this new SCC `restricted-netbind` to the SA test-use:
 
     ~~~sh
     oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:testuser
@@ -275,6 +275,8 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     status: {}
     EOF
     ~~~
+
+> **NOTE:** In this case our container image for reversewords application was built using uid 0 as default user. In case your application has been built to run with an specific uid different from 0 you must force it by adding `runAsUser:0` to you configuration under securityContext. Otherwise the added capabilities won't be effective.
 
 ### **Hands-on Demo 2**
 
@@ -440,7 +442,7 @@ In this demo we are going to deploy the application from Demo 1, but this time u
 
 ### **Hands-on Demo 4**
 
-In this demo we are going to use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as base.
+In this demo, we are going to use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as the base.
 
 1. Build the following Dockerfile
 
@@ -511,7 +513,7 @@ In this demo we are going to use file capabilities to see how we can grant capab
     status: {}
     EOF
     ~~~
-4. The pod is running and it binded to the port 80 eventhough it's running under `restricted` SCC
+4. The pod is running and it binded to the port 80 even though it's running under `restricted` SCC
 
     ~~~sh
     oc -n ${NAMESPACE} get pod -l app=reversewords-app-filecaptest -o yaml | grep scc
@@ -524,6 +526,8 @@ In this demo we are going to use file capabilities to see how we can grant capab
     ~~~sh
     oc -n ${NAMESPACE} logs -l app=reversewords-app-filecaptest
     ~~~
+
+    > **NOTE**: Since the SCC selected was restricted, the user assigned to this pod is not uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being either root or even request the capability.
 
     ~~~
     2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet
