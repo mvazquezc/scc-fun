@@ -109,7 +109,7 @@ In this demo we are going to show a basic scenario of SCCs prioritization that w
 
     NAME        APPLIED SCC
     pod-scc-1   anyuid
-    ~~~~
+    ~~~
 
 
     1. As you can see, the `anyuid` SCC was granted
