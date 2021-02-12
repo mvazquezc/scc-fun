@@ -186,12 +186,12 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     groups: []
     EOF
     ~~~
-5. We're granting privileges of this new SCC `restricted-netbind` to the SA test-user
+5. We're giving access to this new SCC `restricted-netbind` to the SA test-use:
 
     ~~~sh
     oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:testuser
     ~~~
-5. On top of the SCC caps we can drop/add (add will depend on the SCC settings) capabilities on a given pod:
+6. On top of the SCC caps we can drop/add (add will depend on the SCC settings) capabilities on a given pod:
 
     > **NOTE**: Below example drops NET_BIND_SERVICE capability
     ~~~sh
@@ -214,7 +214,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     status: {}
     EOF
     ~~~
-4. Since we're not binding to a privileged port, the application will start with no issues. On top of that the pod started with the `restricted` SCC since it didn't need any extra config provided by our new SCC. Now, let's see what happens if we create the pod with a binding to port 80:
+7. Since we're not binding to a privileged port, the application will start with no issues. On top of that the pod started with the `restricted` SCC since it didn't need any extra config provided by our new SCC. Now, let's see what happens if we create the pod with a binding to port 80:
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -247,7 +247,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
       2021/01/19 17:12:39 Listening on port 80
       2021/01/19 17:12:39 listen tcp :80: bind: permission denied
       ~~~
-5. If we drop all capabilities and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
+8. If we drop all capabilities and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -442,7 +442,7 @@ In this demo we are going to deploy the application from Demo 1, but this time u
 
 ### **Hands-on Demo 4**
 
-In this demo we are going tu use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as base.
+In this demo, we are going to use file capabilities to see how we can grant capabilities to our binaries without having to run them with UID 0. We will use the reverse-words-app as the base.
 
 1. Build the following Dockerfile
 
@@ -527,10 +527,11 @@ In this demo we are going tu use file capabilities to see how we can grant capab
     oc -n ${NAMESPACE} logs -l app=reversewords-app-filecaptest
     ~~~
 
+    > **NOTE**: Since the SCC selected was restricted, the user assigned to this pod is not uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being either root or even request the capability.
+
     ~~~
     2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet
     2021/01/29 16:58:28 Listening on port 80
     ~~~
 
-> **NOTE:** SInce the SCC selected was restricted, the user assigned to this pod is uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being either root or even request the capability.
 
