@@ -101,6 +101,16 @@ In this demo we are going to show a basic scenario of SCCs prioritization that w
 
     oc -n ${NAMESPACE} get pod pod-scc-1 -o yaml | grep "openshift.io/scc"
     ~~~
+    
+    An easier way to check the SCC assigned to your pod, specially if you have multiple pods with likely different SCC assigned is formating the output using custom-columns. For instance, you can just show the name of the pod and the SCC applied without require access to the yaml definition:
+    
+    ~~~sh
+    oc get pod -o 'custom-columns=NAME:metadata.name,APPLIED SCC:metadata.annotations.openshift\.io/scc'
+
+    NAME        APPLIED SCC
+    pod-scc-1   anyuid
+    ~~~~
+
 
     1. As you can see, the `anyuid` SCC was granted
     
