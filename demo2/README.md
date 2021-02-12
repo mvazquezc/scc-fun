@@ -1,4 +1,3 @@
-
 # **Secccomp Security Profiles**
 
 In this demo we will learn how we can work with seccomp profiles for our containers.

@@ -4,7 +4,7 @@ This repository has some demo labs to help you understand how different SCC subs
 
 ## **Demo 1**
 
-SCC for workloads, learn how SCCs are ordered and prioritized for your workloads.
+SCC for workloads, learn how SCCs are accessed, ordered and prioritized for your workloads.
 
 [Start Here](./demo1/README.md)
 
@@ -22,6 +22,12 @@ Capabilities, learn what they are and how you can allow/restrict their use on Op
 
 ## **Demo 4**
 
-Debugging SCCs Issues, apply your knowledge around SCCs to solve some issues related to SCCs.
+SCCs strategies, learn how to work with the different SCC strategies on OpenShift.
 
 [Start Here](./demo4/README.md)
+
+## **Demo 5**
+
+Debugging SCCs Issues, apply your knowledge around SCCs to solve some issues related to SCCs.
+
+[Start Here](./demo5/README.md)
