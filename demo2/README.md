@@ -50,6 +50,7 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 
     ~~~sh
     sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:32 ls -l /
+   
     ~~~
 
     ~~~sh
@@ -66,15 +67,28 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 
     ~~~sh
     sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/lsl.json fedora:32 ls -l /
+    total 4
+    lrwxrwxrwx.   1 root root    7 Jan 28  2020 bin -> usr/bin
+    dr-xr-xr-x.   2 root root    6 Jan 28  2020 boot
+    drwxr-xr-x.   5 root root  340 Feb 16 09:15 dev
+    drwxr-xr-x.  47 root root 4096 Jan  6 06:48 etc
+    drwxr-xr-x.   2 root root    6 Jan 28  2020 home
+    lrwxrwxrwx.   1 root root    7 Jan 28  2020 lib -> usr/lib
+    lrwxrwxrwx.   1 root root    9 Jan 28  2020 lib64 -> usr/lib64
+    drwx------.   2 root root    6 Jan  6 06:47 lost+found
+    drwxr-xr-x.   2 root root    6 Jan 28  2020 media
+    drwxr-xr-x.   2 root root    6 Jan 28  2020 mnt
+    drwxr-xr-x.   2 root root    6 Jan 28  2020 opt
+    ...
     ~~~
 
 ## **Using Seccomp Profiles on OpenShift**
 
-At this point we have a valid seccomp profile, how can we get id added to OpenShift and start using it in our workloads? - Let's see.
+At this point we have a valid seccomp profile, how can we get it added to OpenShift and start using it in our workloads? - Let's see.
 
 ### **Using the seccomp profile in a workload**
 
-1. First, we need to make sure that the seccomp profile exists at the default directory `/var/lib/kubelet/seccomp/`. We need to create a MachineConfig for that.
+1. First, we need to make sure that the seccomp profile exists at the default directory `/var/lib/kubelet/seccomp/`. We need to create a MachineConfig (MC) for that.
 
     > **NOTE:** You can use `cat /tmp/ls.json | jq . | base64 -w0` to encode the file to base64
     ~~~sh
@@ -106,13 +120,13 @@ At this point we have a valid seccomp profile, how can we get id added to OpenSh
         NAMESPACE=test-seccomp
         oc create ns ${NAMESPACE}
         ~~~
-    2. Create a user and give it edit role on the namespace
+    2. Create a user and give it edit role permissions on the namespace
 
         ~~~sh
         oc -n ${NAMESPACE} create sa testuser
         oc -n ${NAMESPACE} adm policy add-role-to-user edit system:serviceaccount:${NAMESPACE}:testuser
         ~~~
-    3. We are going to create our own SCC based on the restricted one, and on top of that we need to allow the use of this new seccomp profile.
+    3. We are going to create our own SCC based on the restricted one, and on top of that we need to allow using this new seccomp profile.
         
         > **NOTE**: We removed `system:authenticated` group so we will need to assign the SCC manually to our SAs/Users/Groups.
 
@@ -159,7 +173,7 @@ At this point we have a valid seccomp profile, how can we get id added to OpenSh
         groups: []
         EOF
         ~~~
-    4. We're grating use privileges of this new SCC to the SA test-user
+    4. We're granting use privileges of this new SCC to the SA test-user
 
         ~~~sh
         oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-seccomp system:serviceaccount:${NAMESPACE}:testuser
@@ -221,7 +235,15 @@ At this point we have a valid seccomp profile, how can we get id added to OpenSh
         status: {}
         EOF
         ~~~
-    8. The pod has completed succesfully, let's try to run `ls -l /` and see if the profile block the execution:
+    8. The pod has completed succesfully:
+    
+        ~~~sh
+        oc get pods
+        NAME                        READY   STATUS      RESTARTS   AGE
+        seccomp-ls-test             0/1     Completed   0          44s
+        ~~~
+    
+    Let's try to run `ls -l /` and see if the profile block the execution:
 
         ~~~sh
         cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -296,7 +318,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     EOF
     ~~~
     
-3. The pod worked now and in the `audit.log` from the node that executed the pod we can find the extra syscalls we need to add to our profile:
+3. The pod worked since we are allowing all syscalls and logging the ones that are not explicitly permitted. In the `audit.log` from the node that executed the pod we can find the extra syscalls we need to add to our profile:
 
     1. Connect to the node that executed the container
         
@@ -398,3 +420,5 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     
     setuid: Invalid argument
     ~~~
+    
+    It is left to the reader creating a seccomp profile that allows ping command to be executed. Remember the two options that have been shown, one it is creating an specific ping secommp list using podman and the bpf hook we already installed. Other option could be to create an empty seccomp profile defaulting to SCMP_ACT_LOG. Do not forget to add the new seccomp json profile to the cluster using the MCO and list it into the allowed seccomp profiles in the restricted-seccomp SCC.
