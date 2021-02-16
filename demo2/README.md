@@ -50,7 +50,6 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 
     ~~~sh
     sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:32 ls -l /
-   
     ~~~
 
     ~~~sh
