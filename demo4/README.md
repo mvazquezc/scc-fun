@@ -65,7 +65,7 @@ In this demo we will see a few `RunAsUser` strategies we can configure.
     groups: []
     EOF
     ~~~
-4. We're grating use privileges of this new SCC to the SA test-user:
+4. We're granting use privileges of this new SCC to the SA test-user:
 
     ~~~sh
     oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-runasuser system:serviceaccount:${NAMESPACE}:testuser
@@ -183,7 +183,28 @@ In this demo we will see a few `RunAsUser` strategies we can configure.
     ~~~
     2000
     ~~~
-14. On top of the new range, we can continue using the range provided by the namespace.
+14. One interesting experiment is what will happen if instead of the range [2000,2500] we force the container to use an UID from the namespace range. Let's do it:
+
+    ~~~sh
+    oc -n ${NAMESPACE} patch deployment reversewords-app -p '{"spec":{"template":{"spec":{"$setElementOrder/containers":[{"name":"reversewords"}],"containers":[{"name":"reversewords","securityContext":{"runAsUser":1000650010}}]}}}}'
+    ~~~
+
+We can think from the results that it is possible then to specify any of the ranges defined either on the SCC or the namespace:
+
+    ~~~sh
+     oc rsh reversewords-app-f9d86bd77-m9nsz whoami
+     1000650010
+    ~~~
+
+However if we pay attention we can see that our SA can use two SCC: the custom one which has higher priority and the default one: restricted. In this case, since the custom one defines a different range than the requested, it is skipped. The restricted one matches perfectly the user requested into the range specified by the namespace so it is used:
+
+   ~~~sh
+   oc describe pod  reversewords-app-f9d86bd77-m9nsz | grep -i "openshift.io/scc:"
+              openshift.io/scc: restricted
+   ~~~
+
+>**NOTE:** You can check the SCC or SCCs that can be used to fulfill the pod spec by executing the scc-review command. They result is a list of SCC ordered.
+
 
 **MustRunAs Strategy**
 
@@ -433,37 +454,51 @@ In this demo we will mount a pv inside a pod and we will see how the different c
     supplementalGroups:
       type: RunAsAny
     ~~~
-2. We are going to re-use the deployment from the previous lab, let's patch it to clean the `FSGroup` configuration:
+2. Scale the deployment to 0:
+
+        ~~~sh
+        oc -n ${NAMESPACE} scale deployment reversewords-app-storage --replicas 0
+        ~~~
+
+3. We are going to re-use the deployment from the previous lab, let's patch it to clean the `FSGroup` configuration:
 
     ~~~sh
     oc -n ${NAMESPACE} patch deployment reversewords-app-storage -p '{"spec":{"template":{"spec":{"securityContext":null}}}}'
     ~~~
-3. Now we can add the `supplementalGroup` config:
+4. Now we can add the `supplementalGroup` config:
 
     ~~~sh
     oc -n ${NAMESPACE} patch deployment reversewords-app-storage -p '{"spec":{"template":{"spec":{"securityContext":{"supplementalGroups":[3000]}}}}}'
     ~~~
-4. If we check the group assigned to our pod we will see how it got assigned the secondary group `3000`:
+
+5. Scale the deployment to 1:
+
+        ~~~sh
+        oc -n ${NAMESPACE} scale deployment reversewords-app-storage --replicas 1
+        ~~~
+
+5. If we check the group assigned to our pod we will see how it got assigned the secondary group `3000`:
 
     ~~~sh
     oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-storage -- id
     ~~~
 
-    > **NOTE**: Group 5000 is still being assigned because the SCC force our pods to run with a group from the 5000-6000 range. It won't affect to the storage mounts though.
+    > **NOTE**: Group 5000 is still being assigned because the SCC force our pods to run with a group from the 5000-6000 range.
 
     ~~~
     uid=1024(1024) gid=0(root) groups=0(root),3000,5000
     ~~~
+    
 5. If we check the storage we mounted we will see a couple things:
 
-    1. The directory is owned by the original owner (`6000` from our previous lab) instead of the SupplementalGroup and still has the `SETGID` bit enabled.
+    1. The directory is owned by the FSgroup id (`5000`) instead of the SupplementalGroup and still has the `SETGID` bit enabled.
 
         ~~~sh
         oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-storage -- ls -ld /mnt/
         ~~~
 
         ~~~
-        drwxrwsrwt. 3 root 6000 133 Feb 12 11:25 /mnt/
+        drwxrwsrwt. 3 root 5000 133 Feb 12 11:25 /mnt/
         ~~~
 
     2. When we create a file it gets created with our UID and the GID from the folder (remember the SETGID):
@@ -475,11 +510,11 @@ In this demo we will mount a pv inside a pod and we will see how the different c
 
         ~~~
         total 199008
-        -rw-rw-r--. 1 root 6000     13802 Jan 20 10:54 df-output
-        -rw-rw-r--. 1 root 6000 203764702 Jan 20 10:55 kubelet
-        drwxrws---. 3 root 6000        17 Feb  9 12:33 systemd-private-362be34de0c3408684990c1a68f76806-chronyd.service-iNYlCW
-        -rw-rw-r--. 1 1024 6000         0 Feb 12 11:25 testfile
-        -rw-r--r--. 1 1024 6000         0 Feb 12 12:00 testfile2
+        -rw-rw-r--. 1 root 5000     13802 Jan 20 10:54 df-output
+        -rw-rw-r--. 1 root 5000 203764702 Jan 20 10:55 kubelet
+        drwxrws---. 3 root 5000        17 Feb  9 12:33 systemd-private-362be34de0c3408684990c1a68f76806-chronyd.service-iNYlCW
+        -rw-rw-r--. 1 1024 5000         0 Feb 12 11:25 testfile
+        -rw-r--r--. 1 1024 5000         0 Feb 12 12:00 testfile2
         ~~~
 6. If this volume was a shared storage being mounted by multiple pods, the supplementalGroup will be set to the owner of the shared storage, then all pods will write with their own UIDs but still have access to files created by other pods.
 
