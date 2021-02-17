@@ -524,7 +524,7 @@ In this demo we will see how we can use `seLinuxContext` strategies. Basically i
 
 Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the pod definition, the container image, or provided as a default. If the seLinuxContext strategy is set to MustRunAs and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the project. In the case of my namespace or project, it defaults to:
 
-~~~yaml
+~~~sh
 oc get ns $NAMESPACE -o yaml | grep "sa.scc.mcs"
 openshift.io/sa.scc.mcs: s0:c27,c9
 ~~~
@@ -627,10 +627,10 @@ system_u:system_r:container_t:s0:c9,c27 3000 3074967 0.0  0.0 24724 2436 ?      
 oc scale deploy selinux-app --replicas=0
 ~~~
 
-~~sh
+```sh
 oc delete scc restricted-runasuser
 securitycontextconstraints.security.openshift.io "restricted-runasuser" deleted
-~~~
+```
 
 ~~~yaml
 cat <<EOF | oc -n ${NAMESPACE} create -f -
