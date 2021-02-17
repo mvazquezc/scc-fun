@@ -198,10 +198,10 @@ We can think from the results that it is possible then to specify any of the ran
 
 However if we pay attention we can see that our SA can use two SCC: the custom one which has higher priority and the default one: restricted. In this case, since the custom one defines a different range than the requested, it is skipped. The restricted one matches perfectly the user requested into the range specified by the namespace so it is used:
 
-   ~~~sh
-   oc describe pod  reversewords-app-f9d86bd77-m9nsz | grep -i "openshift.io/scc:"
+    ~~~sh
+    oc describe pod  reversewords-app-f9d86bd77-m9nsz | grep -i "openshift.io/scc:"
               openshift.io/scc: restricted
-   ~~~
+    ~~~
 
 >**NOTE:** You can check the SCC or SCCs that can be used to fulfill the pod spec by executing the scc-review command. They result is a list of SCC ordered.
 
@@ -524,16 +524,17 @@ In this demo we will see how we can use `seLinuxContext` strategies. Basically i
 
 Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the pod definition, the container image, or provided as a default. If the seLinuxContext strategy is set to MustRunAs and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the project. In the case of my namespace or project, it defaults to:
 
-    ```sh
+    ~~~sh
     oc get ns $NAMESPACE -o yaml | grep "sa.scc.mcs"
     openshift.io/sa.scc.mcs: s0:c27,c9
-    ```
+    ~~~
 
-Now, let's create a deployment called selinux-app without configuring any `SeLinuxContext` and use our restricted-runasuser SCC, where `SELinuxContext` is set to MustRunAs:
+1. Now, let's create a deployment called selinux-app without configuring any `SeLinuxContext` and use our restricted-runasuser SCC, where `SELinuxContext` is set to MustRunAs:
 
-    > **NOTE**: The application that we are deploying is composed by two containers. Each containers run a netcat binary listening in a different port. This is important, since as they are sharing the pod, they cannot listen in the same port.
+> **NOTE**: The application that we are deploying is composed by two containers. Each containers run a netcat binary listening in a different port. This is important, since as they are sharing the pod, they cannot listen in the same port.
 
-    ```sh
+
+    ~~~yaml
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
     apiVersion: apps/v1
     kind: Deployment
@@ -570,27 +571,27 @@ Now, let's create a deployment called selinux-app without configuring any `SeLin
             resources: {}
     status: {}
     EOF
-    ```
+    ~~~
 
-Verify that the pod is running and both containers are deployed by checking the READY field equals to 2/2:
+2. Verify that the pod is running and both containers are deployed by checking the READY field equals to 2/2:
 
-    ```sh
+    ~~~sh
     oc get pods
     NAME                           READY   STATUS    RESTARTS   AGE
     selinux-app-7bc9dc5777-9krwj   2/2     Running   0          15s
-   ```
+   ~~~
 
-Check that the MCS assigned to the pod is the default one assigned to the namespace where the application is running:
+3. Check that the MCS assigned to the pod is the default one assigned to the namespace where the application is running:
 
-    ```sh
+    ~~~sh
     oc get pod -o yaml selinux-app-7bc9dc5777-9krwj| grep -A1 -i "seLinuxOptions:"
         seLinuxOptions:
           level: s0:c27,c9
-    ```
+    ~~~
 
 The SELinux context assigned to the parent pid of each container is also the same one:
 
-    ```sh
+    ~~~sh
     oc rsh -c nc1 deployment/selinux-app ps -auxZq 1 
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
     system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8081
@@ -598,11 +599,11 @@ The SELinux context assigned to the parent pid of each container is also the sam
     oc rsh -c nc2  deployment/selinux-app ps -auxZq 1 
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
     system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8082
-    ```
+    ~~~
 
 This can be verified at the node level as well. See that the pod label can be seen either from the container or from the host where is running. First, find the node where the pod is running and then connect and check the SELinux context assigned:
 
-    ```sh
+    ~~~sh
     oc get pods -o wide
     NAME                           READY   STATUS    RESTARTS   AGE    IP             NODE                                      NOMINATED NODE   READINESS GATES
     selinux-app-7bc9dc5777-9krwj   2/2     Running   0          5m6s   10.134.2.131   cnfdb2.clus2.t5g.lab.eng.bos.redhat.com   <none>           <none>
@@ -618,20 +619,20 @@ This can be verified at the node level as well. See that the pod label can be se
     sh-4.4# ps axufZ | grep "/usr/bin/nc -v -klp 808"
     system_u:system_r:container_t:s0:c9,c27 3000 3074874 0.0  0.0 24724 2440 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8081
     system_u:system_r:container_t:s0:c9,c27 3000 3074967 0.0  0.0 24724 2436 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8082
-    ```
+    ~~~
 
-Ok, so now let's imagine we have a security requirement to have both containers as much isolated one from each other. We can assign a different SELinux MCS to each one. So, let's scale to 0 the deployment, remove the restricted-runasuser SCC and create a new one, which will be similar to the default restricted profile but maintaining the priority to 1 so it is selected instead of the restricted SCC. 
+4. Ok, so now let's imagine we have a security requirement to have both containers as much isolated one from each other. We can assign a different SELinux MCS to each one. So, let's scale to 0 the deployment, remove the restricted-runasuser SCC and create a new one, which will be similar to the default restricted profile but maintaining the priority to 1 so it is selected instead of the restricted SCC. 
 
-    ```sh
+    ~~~sh
     oc scale deploy selinux-app --replicas=0
-    ```
+    ~~~
 
-    ```sh
+    ~~sh
     oc delete scc restricted-runasuser
     securitycontextconstraints.security.openshift.io "restricted-runasuser" deleted
-    ```
+    ~~~
 
-    ```sh
+    ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create -f -
     kind: SecurityContextConstraints
     metadata:
@@ -671,37 +672,37 @@ Ok, so now let's imagine we have a security requirement to have both containers 
       type: MustRunAs
     groups: []
     EOF
-    ```
+    ~~~
 
-Let's patch the deployment by adding to the container named nc1 an specific SELinux label (MCS) different from the one assigned to the namespace:
+5. Let's patch the deployment by adding to the container named nc1 an specific SELinux label (MCS) different from the one assigned to the namespace:
 
-    ```sh
+    ~~~sh
     oc -n ${NAMESPACE} patch deployment selinux-app -p '{"spec":{"template":{"spec":{"$setElementOrder/containers":[{"name":"nc1"}],"containers":[{"name":"nc1","securityContext":{"seLinuxOptions":{"level":"s0:c123,c456"}}}]}}}}'
-    ```
+    ~~~
 
-Now, scale it up:
+6. Now, scale it up:
 
-    ```sh
+    ~~~sh
     oc scale deploy selinux-app --replicas=1
-    ```
+    ~~~
 
 
-See that the deployment is not able to create the pod since the seLinuxOptions.level is invalid because the SCC does not allow us to select any other:
+7. See that the deployment is not able to create the pod since the seLinuxOptions.level is invalid because the SCC does not allow us to select any other:
 
-    ```sh
+    ~~sh
     0s          Warning   FailedCreate        replicaset/selinux-app-6575fb4fff                Error creating: pods "selinux-app-6575fb4fff-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9 spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9]
-    ```
+    ~~~
 
-Now, let's patch the restricted-runasuser SCC by setting the `SeLinuxContext` to **RunAsAny**. Remember that if seLinuxContext is set to RunAsAny, then no default labels are provided, and the container determines the final label if it is not set explicitly. In our case, we are going to force the label for nc1 and let nc2 container to use a default one assigned by the runtime.
+8. Now, let's patch the restricted-runasuser SCC by setting the `SeLinuxContext` to **RunAsAny**. Remember that if seLinuxContext is set to RunAsAny, then no default labels are provided, and the container determines the final label if it is not set explicitly. In our case, we are going to force the label for nc1 and let nc2 container to use a default one assigned by the runtime.
 
 
-    ```sh
+    ~~~sh
     oc patch scc restricted-runasuser -p '{"seLinuxContext":{"type":"RunAsAny"}}' --type merge
-    ```
+    ~~~
 
 Then, after a couple of minutes, verify that the pod is running successfully with the proper SELinux contexts:
 
-    ```sh
+    ~~~sh
     oc rsh -c nc1 deployment/selinux-app ps -auxZq 1 
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
     system_u:system_r:container_t:s0:c123,c456 1000720+ 1 0.0  0.0 24724 2396 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8081
@@ -709,5 +710,5 @@ Then, after a couple of minutes, verify that the pod is running successfully wit
     oc rsh -c nc2 deployment/selinux-app ps -auxZq 1 
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
     system_u:system_r:container_t:s0:c478,c821 1000720+ 1 0.0  0.0 24724 2388 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8082
-```
+    ~~~
 
