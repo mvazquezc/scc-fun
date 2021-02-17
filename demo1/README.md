@@ -5,7 +5,7 @@ In this demo we are going to show a basic scenarios of SCCs access and prioritiz
 
 ## **Hands-on Demo 1**
 
-In this demo we will see how a ServiceAccount can get access to use an SCC by directly granting access to the SCC to the SA.
+In this demo we will see how a ServiceAccount (SA) can get access to use an SCC by directly granting access to the SCC to the SA.
 
 1. Create a namespace for running the demo
 
@@ -43,9 +43,9 @@ In this demo we will see how a ServiceAccount can get access to use an SCC by di
 
 ## **Hands-on Demo 2**
 
-In this demo we will see how a ServiceAccount can get access to use an SCC by granting access to the SCC to a role assigned to the SA.
+In this demo we will see how a ServiceAccount can get access to use an SCC (anyuid). This can be done by creating a Role that allow to use the security.openshift.io API, the resource securityContextConstraint and the specific name of the resource: anyuid. Then, bind the Role to the SA by means of a Rolebinding.
 
-1. Create a new ServiceAccoun
+1. Create a new ServiceAccount
 
     ~~~sh
     oc -n ${NAMESPACE} create serviceaccount testsa2
@@ -192,6 +192,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC by gr
         anyuid       false   <no value>   MustRunAs   RunAsAny         RunAsAny    RunAsAny   10           false            ["configMap","downwardAPI","emptyDir","persistentVolumeClaim","projected","secret"]
         ~~~
     3. The SCC `anyuid` has a priority of 10 while restricted has no priority, that means `anyuid` will be prefered even if the pods doesn't need it
+    
 9. Let's create the pod again to see what SCC does it get this time
 
     ~~~sh
