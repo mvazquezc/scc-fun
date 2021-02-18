@@ -522,7 +522,7 @@ In this demo we will mount a pv inside a pod and we will see how the different c
 
 In this demo we will see how we can use `seLinuxContext` strategies. Basically it controls which SELinux context is used by the containers.
 
-Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the pod definition, the container image, or provided as a default. If the seLinuxContext strategy is set to MustRunAs and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the project. In the case of my namespace or project, it defaults to:
+Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the securityContext at the pod level, at the container level, or provided as a default. If the seLinuxContext strategy is set to MustRunAs and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the project. In the case of my namespace or project, it defaults to:
 
 ~~~sh
 oc get ns $NAMESPACE -o yaml | grep "sa.scc.mcs"
@@ -711,4 +711,3 @@ oc rsh -c nc2 deployment/selinux-app ps -auxZq 1
 LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
 system_u:system_r:container_t:s0:c478,c821 1000720+ 1 0.0  0.0 24724 2388 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8082
 ~~~
-
