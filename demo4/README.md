@@ -660,192 +660,172 @@ In this demo we will mount a PV inside a pod and we will see how the different c
 
 In this demo we will see how we can use `seLinuxContext` strategies. Basically it controls which SELinux context is used by the containers.
 
-Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the securityContext at the pod level, at the container level, or provided as a default. If the seLinuxContext strategy is set to MustRunAs and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the project. In the case of my namespace or project, it defaults to:
+Note that all predefined SCCs, except for the privileged SCC, set the seLinuxContext to MustRunAs. This forces pods to use MCS labels, which can be defined in the securityContext at the pod level, at the container level, or provided as a default. If the `seLinuxContext` strategy is set to `MustRunAs` and the pod (or image) does not define a label, OpenShift Container Platform defaults to a label chosen from the SCC itself or from the namespace. In the case of my namespace, it defaults to:
 
 ~~~sh
 oc get ns $NAMESPACE -o yaml | grep "sa.scc.mcs"
+~~~
+
+> **NOTE**: Below output might be different on your cluster depending on the range assigned to your namespace.
+~~~
 openshift.io/sa.scc.mcs: s0:c27,c9
 ~~~
 
-1. Now, let's create a deployment called selinux-app without configuring any `SeLinuxContext` and use our restricted-runasuser SCC, where `SELinuxContext` is set to MustRunAs:
+1. Now, let's create a deployment called selinux-app without configuring any `SeLinuxContext` and which uses our restricted-runasuser SCC, where `SELinuxContext` is set to MustRunAs.
 
-> **NOTE**: The application that we are deploying is composed by two containers. Each containers run a netcat binary listening in a different port. This is important, since as they are sharing the pod, they cannot listen in the same port.
+    > **NOTE**: The application that we are deploying is composed by two containers. Each container runs a netcat binary listening on a different port. This is important, since as they are sharing the pod, they cannot listen on the same port.
 
-
-~~~yaml
-cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  creationTimestamp: null
-  labels:
-    app: selinux-app
-  name: selinux-app
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: selinux-app
-  strategy: {}
-  template:
+    ~~~sh
+    cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
+    apiVersion: apps/v1
+    kind: Deployment
     metadata:
       creationTimestamp: null
       labels:
         app: selinux-app
+      name: selinux-app
     spec:
-      serviceAccountName: testuser
-      containers:
-      - image: quay.io/alosadag/nc
-        name: nc1
-        env:
-        - name: PORT
-          value: "8081"
-        resources: {} 
-      - image: quay.io/alosadag/nc
-        name: nc2
-        env:
-        - name: PORT
-          value: "8082"
-        resources: {}
-status: {}
-EOF
-~~~
+      replicas: 1
+      selector:
+        matchLabels:
+          app: selinux-app
+      strategy: {}
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app: selinux-app
+        spec:
+          serviceAccountName: testuser
+          containers:
+          - image: quay.io/alosadag/nc
+            name: nc1
+            env:
+            - name: PORT
+              value: "8081"
+            resources: {} 
+          - image: quay.io/alosadag/nc
+            name: nc2
+            env:
+            - name: PORT
+              value: "8082"
+            resources: {}
+    status: {}
+    EOF
+    ~~~
 
 2. Verify that the pod is running and both containers are deployed by checking the READY field equals to 2/2:
 
-~~~sh
-oc get pods
-NAME                           READY   STATUS    RESTARTS   AGE
-selinux-app-7bc9dc5777-9krwj   2/2     Running   0          15s
-~~~
+    ~~~sh
+    oc -n ${NAMESPACE} get pods -l app=selinux-app
+    ~~~
+
+    ~~~
+    NAME                           READY   STATUS    RESTARTS   AGE
+    selinux-app-7bc9dc5777-9krwj   2/2     Running   0          15s
+    ~~~
 
 3. Check that the MCS assigned to the pod is the default one assigned to the namespace where the application is running:
 
-~~~sh
-oc get pod -o yaml selinux-app-7bc9dc5777-9krwj| grep -A1 -i "seLinuxOptions:"
-    seLinuxOptions:
-      level: s0:c27,c9
-~~~
+    ~~~sh
+    oc -n ${NAMESPACE} get pod -l app=selinux-app -o 'custom-columns=NAME:metadata.name,APPLIED MCS:spec.securityContext.seLinuxOptions.level'
+    ~~~
 
-The SELinux context assigned to the parent pid of each container is also the same one:
+    ~~~
+    NAME                                APPLIED MCS
+    selinux-app-7bc9dc5777-9krwj        s0:c27,c9
+    ~~~
 
-~~~sh
-oc rsh -c nc1 deployment/selinux-app ps -auxZq 1 
-LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8081
+    1. The SELinux context assigned to the parent pid of each container is also the same one:
 
-oc rsh -c nc2  deployment/selinux-app ps -auxZq 1 
-LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8082
-~~~
+    ~~~sh
+    oc -n ${NAMESPACE} exec -c nc1 deployment/selinux-app -- ps -auxZq 1
+    ~~~
 
-This can be verified at the node level as well. See that the pod label can be seen either from the container or from the host where is running. First, find the node where the pod is running and then connect and check the SELinux context assigned:
+    ~~~
+    LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+    system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8081
+    ~~~
 
-~~~sh
-oc get pods -o wide
-NAME                           READY   STATUS    RESTARTS   AGE    IP             NODE                                      NOMINATED NODE   READINESS GATES
-selinux-app-7bc9dc5777-9krwj   2/2     Running   0          5m6s   10.134.2.131   cnfdb2.clus2.t5g.lab.eng.bos.redhat.com   <none>           <none>
+    ~~~sh
+    oc -n ${NAMESPACE} exec -c nc2 deployment/selinux-app -- ps -auxZq 1 
+    ~~~
 
-oc debug node/cnfdb2.clus2.t5g.lab.eng.bos.redhat.com
-Creating debug namespace/openshift-debug-node-m9dxb ...
-Starting pod/cnfdb2clus2t5glabengbosredhatcom-debug ...
-To use host binaries, run `chroot /host`
-Pod IP: 10.19.16.3
-If you don't see a command prompt, try pressing enter.
-sh-4.4# chroot /host
+    ~~~
+    LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+    system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8082
+    ~~~
 
-sh-4.4# ps axufZ | grep "/usr/bin/nc -v -klp 808"
-system_u:system_r:container_t:s0:c9,c27 3000 3074874 0.0  0.0 24724 2440 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8081
-system_u:system_r:container_t:s0:c9,c27 3000 3074967 0.0  0.0 24724 2436 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8082
-~~~
+    2. This can be verified at the node level as well. See that the pod label can be seen either from the container or from the host where it is running. First, find the node where the pod is running and then connect and check the SELinux context assigned:
 
-4. Ok, so now let's imagine we have a security requirement to have both containers as much isolated one from each other. We can assign a different SELinux MCS to each one. So, let's scale to 0 the deployment, remove the restricted-runasuser SCC and create a new one, which will be similar to the default restricted profile but maintaining the priority to 1 so it is selected instead of the restricted SCC. 
+        ~~~sh
+        # Get the node that executed the pod
+        POD_NODE=$(oc -n ${NAMESPACE} get pod -l app=selinux-app -o jsonpath='{.items[*].spec.nodeName}')
+        # Connected to the node
+        oc debug node/${POD_NODE}
+        # Chroot and grep for the NC processes
+        chroot /host
+        ps axufZ | grep "/usr/bin/nc -v -klp 808"
+        ~~~
 
-~~~sh
-oc scale deploy selinux-app --replicas=0
-~~~
+        ~~~
+        system_u:system_r:container_t:s0:c9,c27 3000 3074874 0.0  0.0 24724 2440 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8081
+        system_u:system_r:container_t:s0:c9,c27 3000 3074967 0.0  0.0 24724 2436 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8082
+        ~~~
 
-```sh
-oc delete scc restricted-runasuser
-securitycontextconstraints.security.openshift.io "restricted-runasuser" deleted
-```
-
-~~~yaml
-cat <<EOF | oc -n ${NAMESPACE} create -f -
-kind: SecurityContextConstraints
-metadata:
-  name: restricted-runasuser
-priority: 1
-readOnlyRootFilesystem: false
-requiredDropCapabilities:
-- KILL
-- MKNOD
-- SETUID
-- SETGID
-runAsUser:
-  type: MustRunAsRange
-seLinuxContext:
-  type: MustRunAs
-supplementalGroups:
-  type: RunAsAny
-users: []
-volumes:
-- configMap
-- downwardAPI
-- emptyDir
-- persistentVolumeClaim
-- projected
-- secret
-allowHostDirVolumePlugin: false
-allowHostIPC: false
-allowHostNetwork: false
-allowHostPID: false
-allowHostPorts: false
-allowPrivilegeEscalation: true
-allowPrivilegedContainer: false
-allowedCapabilities: null
-apiVersion: security.openshift.io/v1
-defaultAddCapabilities: null
-fsGroup:
-  type: MustRunAs
-groups: []
-EOF
-~~~
-
-5. Let's patch the deployment by adding to the container named nc1 an specific SELinux label (MCS) different from the one assigned to the namespace:
-
-~~~sh
-oc -n ${NAMESPACE} patch deployment selinux-app -p '{"spec":{"template":{"spec":{"$setElementOrder/containers":[{"name":"nc1"}],"containers":[{"name":"nc1","securityContext":{"seLinuxOptions":{"level":"s0:c123,c456"}}}]}}}}'
-~~~
-
-6. Now, scale it up:
-
-~~~sh
-oc scale deploy selinux-app --replicas=1
-~~~
+4. Ok, so now let's imagine we have a security requirement to have both containers as much isolated as possible from each other. We can assign a different SELinux MCS to each one.
 
 
-7. See that the deployment is not able to create the pod since the seLinuxOptions.level is invalid because the SCC does not allow us to select any other:
+    1. Let's scale the deployment to 0 and patch it so one of the containers uses a different MCS label from the one assigned to the namespace:
 
-~~~sh
-0s          Warning   FailedCreate        replicaset/selinux-app-6575fb4fff                Error creating: pods "selinux-app-6575fb4fff-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9 spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9]
-~~~
+        ~~~sh
+        oc -n ${NAMESPACE} scale deployment selinux-app --replicas 0
+        ~~~
 
-8. Now, let's patch the restricted-runasuser SCC by setting the `SeLinuxContext` to **RunAsAny**. Remember that if seLinuxContext is set to RunAsAny, then no default labels are provided, and the container determines the final label if it is not set explicitly. In our case, we are going to force the label for nc1 and let nc2 container to use a default one assigned by the runtime.
+        ~~~sh
+        oc -n ${NAMESPACE} patch deployment selinux-app -p '{"spec":{"template":{"spec":{"$setElementOrder/containers":[{"name":"nc1"}],"containers":[{"name":"nc1","securityContext":{"seLinuxOptions":{"level":"s0:c123,c456"}}}]}}}}'
+        ~~~
+    2. We can scale the deployment back to 1:
 
+        ~~~sh
+        oc -n ${NAMESPACE} scale deployment selinux-app --replicas 1
+        ~~~
+    3. See that the deployment is not able to create the pod since the seLinuxOptions.level is invalid because the SCC does not allow us to select any other:
 
-~~~sh
-oc patch scc restricted-runasuser -p '{"seLinuxContext":{"type":"RunAsAny"}}' --type merge
-~~~
+        ~~~sh
+        oc -n ${NAMESPACE} get deployment selinux-app -o yaml | grep -A20 ^status:
+        ~~~
 
-Then, after a couple of minutes, verify that the pod is running successfully with the proper SELinux contexts:
+        ~~~
+        status:
+          conditions:
+          <OUTPUT_OMITTED>
+            - lastTransitionTime: "2021-02-19T18:42:19Z"
+              lastUpdateTime: "2021-02-19T18:42:19Z"
+              message: 'pods "selinux-app-6575fb4fff-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9 spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9]'
+        <OUTPUT_OMITTED>
+        ~~~
+    4. Now, let's patch the restricted-runasuser SCC by setting the `SeLinuxContext` to **RunAsAny**. Remember that if seLinuxContext is set to RunAsAny, then no default labels are provided, and the container determines the final label if it is not set explicitly. In our case, we are going to force the label for nc1 and let nc2 container to use a default one assigned by the runtime.
 
-~~~sh
-oc rsh -c nc1 deployment/selinux-app ps -auxZq 1 
-LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-system_u:system_r:container_t:s0:c123,c456 1000720+ 1 0.0  0.0 24724 2396 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8081
+        ~~~sh
+        oc patch scc restricted-runasuser -p '{"seLinuxContext":{"type":"RunAsAny"}}' --type merge
+        ~~~
+5. After a couple of minutes, verify that the pod is running successfully with the proper SELinux contexts:
 
-oc rsh -c nc2 deployment/selinux-app ps -auxZq 1 
-LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-system_u:system_r:container_t:s0:c478,c821 1000720+ 1 0.0  0.0 24724 2388 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8082
-~~~
+    ~~~sh
+    oc -n ${NAMESPACE} exec -c nc1 deployment/selinux-app -- ps -auxZq 1
+    ~~~
+
+    ~~~
+    LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+    system_u:system_r:container_t:s0:c123,c456 1000720+ 1 0.0  0.0 24724 2396 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8081
+    ~~~
+
+    ~~~sh
+    oc -n ${NAMESPACE} exec -c nc2 deployment/selinux-app -- ps -auxZq 1 
+    ~~~
+
+    ~~~
+    LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+    system_u:system_r:container_t:s0:c478,c821 1000720+ 1 0.0  0.0 24724 2388 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8082
+    ~~~
