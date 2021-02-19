@@ -284,7 +284,7 @@ In this demo we will mount a pv inside a pod and we will see how the different c
     volumeBindingMode: WaitForFirstConsumer
     EOF
     ~~~
-2. We are going to create a block storage volume using the `local` plugin in a `PersistentVolume` which will give us access to a folder inside the `worker` nodes:
+2. We are going to create a block storage volume using the `local` plugin in a `PersistentVolume` (PV) which will give us access to a folder inside the `worker` nodes:
 
     ~~~sh
     cat <<EOF | oc create -f -
@@ -336,7 +336,7 @@ In this demo we will mount a pv inside a pod and we will see how the different c
     ~~~sh
     oc patch scc restricted-runasuser -p '{"fsGroup":{"ranges":[{"max":7000,"min":6000}]}}' --type merge
     ~~~
-5. Now, it's time to create the deployment, we will use `FSGroup` 5005:
+5. Now, it's time to create the deployment, we will use `FSGroup` 6005:
     
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -457,7 +457,7 @@ In this demo we will mount a pv inside a pod and we will see how the different c
 
 `SupplementalGroups` can be used for block and shared, but it is usually used by the later. No chown will be done here. Permissions will be managed at the shared file system level. 
 
-In this demo we will mount a pv inside a pod and we will see how the different configurations for `SupplementalGroup` affect to the files created on the storage.
+In this demo we will mount a PV inside a pod and we will see how the different configurations for `SupplementalGroup` affect to the files created on the storage.
 
 1. In order to have SharedStorage we will deploy a NFS server:
 
