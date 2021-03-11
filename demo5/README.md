@@ -37,7 +37,7 @@ We have a workload that requires binding to port 80. We create the deployment bu
         spec:
           serviceAccountName: default
           containers:
-          - image: quay.io/mavazque/reversewords:latest
+          - image: quay.io/mavazque/reversewords:ubi8
             name: reversewords
             resources: {}
             env:
