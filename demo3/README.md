@@ -247,7 +247,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
       2021/01/19 17:12:39 Listening on port 80
       2021/01/19 17:12:39 listen tcp :80: bind: permission denied
       ~~~
-8. If we drop all capabilities and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
+8. If we drop all runtime's default capabilities and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -267,7 +267,14 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
           runAsUser: 0
           capabilities:
             drop:
-            - all
+            - CHOWN
+            - DAC_OVERRIDE
+            - FSETID
+            - FOWNER
+            - SETGID
+            - SETUID
+            - SETPCAP
+            - KILL
             add:
             - NET_BIND_SERVICE
       dnsPolicy: ClusterFirst
@@ -299,7 +306,15 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
         securityContext:
           capabilities:
             drop:
-            - all
+            - CHOWN
+            - DAC_OVERRIDE
+            - FSETID
+            - FOWNER
+            - SETGID
+            - SETUID
+            - SETPCAP
+            - KILL
+            - NET_BIND_SERVICE
       dnsPolicy: ClusterFirst
       restartPolicy: Never
     status: {}
@@ -334,7 +349,14 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
           runAsUser: 0
           capabilities:
             drop:
-            - all
+            - DAC_OVERRIDE
+            - FSETID
+            - FOWNER
+            - SETGID
+            - SETUID
+            - SETPCAP
+            - KILL
+            - NET_BIND_SERVICE
             add:
             - CHOWN
       dnsPolicy: ClusterFirst
@@ -389,7 +411,14 @@ In this demo we are going to deploy the application from Demo 1, but this time u
               runAsUser: 0
               capabilities:
                 drop:
-                - all
+                - CHOWN
+                - DAC_OVERRIDE
+                - FSETID
+                - FOWNER
+                - SETGID
+                - SETUID
+                - SETPCAP
+                - KILL
                 add:
                 - NET_BIND_SERVICE
     status: {}
@@ -474,7 +503,7 @@ In this demo, we are going to use file capabilities to see how we can grant capa
     ~~~
 3. Let's create a deployment for the application
 
-    >**NOTE**: As you can see we're using the `default` SA for running our deployment, we are not running as UID 0 and we're dropping all capabilities.
+    >**NOTE**: As you can see we're using the `reverse-words-app` SA for running our deployment, we are not running as UID 0 and we're dropping all capabilities but NET_BIND_SERVICE.
 
     ~~~sh
     APP_IMAGE=quay.io/${QUAY_USER}/reversewords-captest:latest
@@ -498,7 +527,7 @@ In this demo, we are going to use file capabilities to see how we can grant capa
           labels:
             app: reversewords-app-filecaptest
         spec:
-          serviceAccountName: default
+          serviceAccountName: reverse-words-app
           containers:
           - image: ${APP_IMAGE}
             name: reversewords
@@ -508,26 +537,35 @@ In this demo, we are going to use file capabilities to see how we can grant capa
               value: "80"
             securityContext:
               capabilities:
+                add:
+                - NET_BIND_SERVICE
                 drop:
-                - all
+                - CHOWN
+                - DAC_OVERRIDE
+                - FSETID
+                - FOWNER
+                - SETGID
+                - SETUID
+                - SETPCAP
+                - KILL
     status: {}
     EOF
     ~~~
-4. The pod is running and it binded to the port 80 even though it's running under `restricted` SCC
+4. The pod is running and it binded to the port 80 even though it's running under `restricted-netbind` SCC and with a nonroot UID
 
     ~~~sh
     oc -n ${NAMESPACE} get pod -l app=reversewords-app-filecaptest -o yaml | grep scc
     ~~~
 
     ~~~
-    openshift.io/scc: restricted
+    openshift.io/scc: restricted-netbind
     ~~~
 
     ~~~sh
     oc -n ${NAMESPACE} logs -l app=reversewords-app-filecaptest
     ~~~
 
-    > **NOTE**: Since the SCC selected was restricted, the user assigned to this pod is not uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being either root or even request the capability.
+    > **NOTE**: Since the SCC selected was restricted-netbind, the user assigned to this pod is not uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being root.
 
     ~~~
     2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet

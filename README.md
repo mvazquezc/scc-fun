@@ -2,6 +2,11 @@
 
 This repository has some demo labs to help you understand how different SCC subsystems work.
 
+It's highly recommended reviewing the following blogs in order to understand the concepts used in the labs:
+
+* [Container Security - Linux Capabilities and Secure Compute Profiles](https://linuxera.org/container-security-capabilities-seccomp/)
+* [Capabilities and Seccomp Profiles on Kubernetes](https://linuxera.org/capabilities-seccomp-kubernetes/)
+
 ## **Demo 1**
 
 SCC for workloads, learn how SCCs are accessed, ordered and prioritized for your workloads.
