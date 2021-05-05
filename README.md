@@ -36,3 +36,9 @@ SCCs strategies, learn how to work with the different SCC strategies on OpenShif
 Debugging SCCs Issues, apply your knowledge around SCCs to solve some issues related to SCCs.
 
 [Start Here](./demo5/README.md)
+
+## **Demo 6**
+
+Privilege Escalation bit, learn how to control if your containers can run privilege escalation operators through the use of _no_new_privs_ bit.
+
+[Start Here](./demo6/README.md)
