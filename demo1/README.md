@@ -25,7 +25,7 @@ In this demo we will see how a ServiceAccount (SA) can get access to use an SCC 
     ~~~
 4. Check who can use the `anyuid` SCC
     ~~~sh
-    oc adm policy who-can use scc anyuid
+    oc -n ${NAMESPACE}  adm policy who-can use scc anyuid
     ~~~
 
     > **NOTE**: As you can see the SA testsa1 has access to use the scc.
