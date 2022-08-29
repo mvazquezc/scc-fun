@@ -7,6 +7,10 @@ It's highly recommended reviewing the following blogs in order to understand the
 * [Container Security - Linux Capabilities and Secure Compute Profiles](https://linuxera.org/container-security-capabilities-seccomp/)
 * [Capabilities and Seccomp Profiles on Kubernetes](https://linuxera.org/capabilities-seccomp-kubernetes/)
 
+## **Versions used**
+
+Labs were last tested with OCP v4.11.0.
+
 ## **Demo 1**
 
 SCC for workloads, learn how SCCs are accessed, ordered and prioritized for your workloads.

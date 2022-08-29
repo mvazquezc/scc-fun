@@ -10,12 +10,16 @@ We will see how we can add/drop capabilities in a given container using Podman a
 
 ### **Hands-on Demo**
 
+> **NOTE**: Below tests were run in a Fedora 35 machine with Podman v3.4.4, results may vary when using other O.S / Podman version.
+
 1. Install podman on your system in case you don't have it yet.
-2. Let's run an nginx container and see which capabilities are added to the container.
+
+2. Let's run a nginx container and see which capabilities are added to the container.
 
     ~~~sh
     podman run -d --rm --name nginx-cap-test nginx:latest
     ~~~
+
 3. Let's check the capabilities assigned to that process.
 
     1. We can do it using the `/proc` filesystem:
@@ -25,42 +29,47 @@ We will see how we can add/drop capabilities in a given container using Podman a
         cat /proc/${CONTAINER_PID}/status | grep Cap
         ~~~
 
-        ~~~
+        ~~~sh
         CapInh:	00000000a80425fb
         CapPrm:	00000000a80425fb
         CapEff:	00000000a80425fb
         CapBnd:	00000000a80425fb
-        CapAmb:	00000000a80425fb
+        CapAmb:	0000000000000000
         ~~~
+
     2. We got a list of capabilities, if we want to decode the value we can use `capsh`:
 
         ~~~sh
         capsh --decode=00000000a80425fb
         ~~~
 
-        ~~~
+        ~~~sh
         0x00000000a80425fb=cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
         ~~~
+
     3. We can get them with `podman inspect` as well:
 
         ~~~sh
         podman inspect nginx-cap-test --format {{.EffectiveCaps}}
         ~~~
 
-        ~~~
+        ~~~sh
         [CAP_AUDIT_WRITE CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_KILL CAP_MKNOD CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_SETFCAP CAP_SETGID CAP_SETPCAP CAP_SETUID CAP_SYS_CHROOT]
         ~~~
+
     4. And a third tool to get them could be `getpcaps`:
 
         ~~~sh
         CONTAINER_PID=$(podman inspect nginx-cap-test --format {{.State.Pid}})
         getpcaps ${CONTAINER_PID}
         ~~~
+
     5. We can stop the container now:
 
         ~~~sh
         podman stop nginx-cap-test
         ~~~
+
 4. So by default, podman will configure the capabilities defined [here](https://github.com/containers/common/blob/v0.33.1/pkg/config/default.go#L62-L77) or alternatively the ones configured in its configuration file.
 
 We can also drop capabilities not needed by our application, that way we are reducing the attack surface. Let's see.
@@ -70,15 +79,17 @@ We can also drop capabilities not needed by our application, that way we are red
     ~~~sh
     podman run -d --rm --name reverse-words-app --cap-drop=all quay.io/mavazque/reversewords:latest
     ~~~
+
 2. If we check the capabilities, we will see that the container has no capabilities:
 
     ~~~sh
     podman inspect reverse-words-app --format {{.EffectiveCaps}}
     ~~~
 
-    ~~~
+    ~~~sh
     []
     ~~~
+
 3. Now we want our application to bind port 80, that will require the capability `NET_BIND_SERVICE`, let's see what happens if we try to run the app without that capability:
 
     ~~~sh
@@ -86,19 +97,20 @@ We can also drop capabilities not needed by our application, that way we are red
     ~~~
 
     1. The container failed to start because it couldn't bind port 80 to the container namespace. It required higher permissions:
-      
-        ~~~
+
+        ~~~sh
         2021/01/19 16:12:53 Starting Reverse Api v0.0.17 Release: NotSet
         2021/01/19 16:12:53 Listening on port 80
         2021/01/19 16:12:53 listen tcp :80: bind: permission denied
         ~~~
+
 4. If we add that capability, we will see how the container now starts properly and binds to port 80:
 
     ~~~sh
     podman run --rm --name reverse-words-app-80 --cap-drop=all --cap-add=cap_net_bind_service -e APP_PORT=80 quay.io/mavazque/reversewords:latest
     ~~~
 
-    ~~~
+    ~~~sh
     2021/01/19 16:14:34 Starting Reverse Api v0.0.17 Release: NotSet
     2021/01/19 16:14:34 Listening on port 80
     ~~~
@@ -107,7 +119,7 @@ We can also drop capabilities not needed by our application, that way we are red
 
 Now it's time to see how capabilities can be managed on OpenShift.
 
-Before we start, it is worth mentioning that there is a [limitation](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expected if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
+Before we start, it is worth mentioning that there is a [limitation](https://github.com/kubernetes/kubernetes/issues/56374) in Kubernetes that will prevent capabilities to work as one would expect if not running your pods with UID 0, that's why we will allow our pods to run with any uid on the following examples.
 
 There are tools such as [capabilities_tracker](https://github.com/clustership/capabilities_tracker/blob/master/OPENSHIFT_USAGE.md) which can help you to understand which capabilities are being used by your apps.
 
@@ -121,35 +133,34 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     NAMESPACE=test-capabilities
     oc create ns ${NAMESPACE}
     ~~~
+
 2. Create a user and give it edit role on the namespace
 
     ~~~sh
     oc -n ${NAMESPACE} create sa testuser
     oc -n ${NAMESPACE} adm policy add-role-to-user edit system:serviceaccount:${NAMESPACE}:testuser
     ~~~
-3. The default SCC `restricted` has the following settings for capabilities:
 
-    > **NOTE**: The configuration below basically means pods running with restricted SCC cannot gain any new capabilities. And KILL, MKNOD, SETUID and SETGID are dropped in case those are granted by the container runtime.
+3. The default SCC `restricted-v2` has the following settings for capabilities:
+
+    > **NOTE**: The configuration below basically means pods running with restricted-v2 SCC can only gain `NET_BIND_SERVICE` capability. Every other capability will be dropped.
 
     ~~~yaml
     defaultAddCapabilities: null
-    allowedCapabilities: null
+    allowedCapabilities:
+    - NET_BIND_SERVICE
     requiredDropCapabilities:
-    - KILL
-    - MKNOD
-    - SETUID
-    - SETGID
+    - ALL
     ~~~
 
-4. We are going to create our own SCC based on the restricted one, and on top of that, we need our container to run with `anyuid` (due to the issue mentioned earlier) and we want to be able to use `NET_BIND_SERVICE` capability.
+4. We are going to create our own SCC based on the `restricted` SCC (NOT restricted-v2), and on top of that, we need our container to run with `anyuid` (due to the issue mentioned earlier) and we want to be able to use `NET_BIND_SERVICE` capability.
 
-    > **NOTE**: We removed `system:authenticated` group so we will need to assign the SCC manually to our SAs/Users/Groups.
     ~~~sh
     cat <<EOF | oc create -f -
     kind: SecurityContextConstraints
     metadata:
       name: restricted-netbind
-    priority: null
+    priority: 1
     readOnlyRootFilesystem: false
     requiredDropCapabilities:
     - KILL
@@ -186,14 +197,17 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     groups: []
     EOF
     ~~~
+
 5. We're giving access to this new SCC `restricted-netbind` to the SA test-use:
 
     ~~~sh
     oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:testuser
     ~~~
+
 6. On top of the SCC caps we can drop/add (add will depend on the SCC settings) capabilities on a given pod:
 
     > **NOTE**: Below example drops NET_BIND_SERVICE capability
+
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
     apiVersion: v1
@@ -214,6 +228,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     status: {}
     EOF
     ~~~
+
 7. Since we're not binding to a privileged port, the application will start with no issues. On top of that the pod started with the `restricted` SCC since it didn't need any extra config provided by our new SCC. Now, let's see what happens if we create the pod with a binding to port 80:
 
     ~~~sh
@@ -242,12 +257,17 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
 
     1. The pod failed to run, in the logs we can see:
 
-      ~~~
-      2021/01/19 17:12:39 Starting Reverse Api v0.0.17 Release: NotSet
-      2021/01/19 17:12:39 Listening on port 80
-      2021/01/19 17:12:39 listen tcp :80: bind: permission denied
-      ~~~
-8. If we drop all runtime's default capabilities and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
+        ~~~sh
+        oc -n ${NAMESPACE} logs reversewords-app-captest-80
+        ~~~
+
+        ~~~sh
+        2021/01/19 17:12:39 Starting Reverse Api v0.0.17 Release: NotSet
+        2021/01/19 17:12:39 Listening on port 80
+        2021/01/19 17:12:39 listen tcp :80: bind: permission denied
+        ~~~
+
+8. If we drop all capabilities, and we add NET_BIND_SERVICE to the list of capabilities we will see how the pod now runs properly:
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -267,14 +287,7 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
           runAsUser: 0
           capabilities:
             drop:
-            - CHOWN
-            - DAC_OVERRIDE
-            - FSETID
-            - FOWNER
-            - SETGID
-            - SETUID
-            - SETPCAP
-            - KILL
+            - ALL
             add:
             - NET_BIND_SERVICE
       dnsPolicy: ClusterFirst
@@ -283,7 +296,11 @@ In this demo we are going to see how we can drop all capabilities but NET_BIND_S
     EOF
     ~~~
 
-> **NOTE:** In this case our container image for reversewords application was built using uid 0 as default user. In case your application has been built to run with an specific uid different from 0 you must force it by adding `runAsUser:0` to you configuration under securityContext. Otherwise the added capabilities won't be effective.
+    ~~~sh
+    oc -n ${NAMESPACE} logs reversewords-app-captest-80-2
+    ~~~
+
+> **NOTE:** In this case our container image for reversewords application was built using uid 0 as default user. In case your application has been built to run with a specific uid different from 0 you must force it by adding `runAsUser:0` to you configuration under securityContext. Otherwise, the added capabilities won't be effective.
 
 ### **Hands-on Demo 2**
 
@@ -300,7 +317,7 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
     spec:
       serviceAccountName: testuser
       containers:
-      - image: registry.centos.org/centos:8
+      - image: quay.io/fedora/fedora:36
         command: ["chown", "-v", "nobody", "/etc/resolv.conf"]
         name: centos
         securityContext:
@@ -320,17 +337,24 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
     status: {}
     EOF
     ~~~
+
 2. The pod failed:
 
+    ~~~sh
+    oc -n ${NAMESPACE} logs chown-test
     ~~~
+
+    ~~~sh
     chown: changing ownership of '/etc/resolv.conf': Operation not permitted
     failed to change ownership of '/etc/resolv.conf' from root to nobody
     ~~~
+
 3. We can patch the SCC we created in the previous demo and allow the use of CHOWN capability as well:
 
     ~~~sh
     oc patch scc restricted-netbind -p '{"allowedCapabilities":["NET_BIND_SERVICE","CHOWN"]}' --type=merge
     ~~~
+
 4. Let's try to create the pod again, but now request the capability we just added to the SCC:
 
     ~~~sh
@@ -364,9 +388,14 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
     status: {}
     EOF
     ~~~
+
 5. Now we can see that it works as expected now:
 
+    ~~~sh
+    oc -n ${NAMESPACE} logs chown-test-2
     ~~~
+
+    ~~~sh
     changed ownership of '/etc/resolv.conf' from root to nobody
     ~~~
 
@@ -411,19 +440,13 @@ In this demo we are going to deploy the application from Demo 1, but this time u
               runAsUser: 0
               capabilities:
                 drop:
-                - CHOWN
-                - DAC_OVERRIDE
-                - FSETID
-                - FOWNER
-                - SETGID
-                - SETUID
-                - SETPCAP
-                - KILL
+                - ALL
                 add:
                 - NET_BIND_SERVICE
     status: {}
     EOF
     ~~~
+
 2. No pods were created, but why? - Let's check the deployment status:
 
     ~~~sh
@@ -434,37 +457,42 @@ In this demo we are going to deploy the application from Demo 1, but this time u
 
         ~~~json
         {
-          "lastTransitionTime": "2021-01-29T09:15:15Z",
-          "lastUpdateTime": "2021-01-29T09:15:15Z",
-          "message": "pods \"reversewords-app-captest-7646fc5646-\" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000650000, 1000659999] spec.containers[0].securityContext.capabilities.add: Invalid value: \"NET_BIND_SERVICE\": capability may not be added spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000650000, 1000659999] spec.containers[0].securityContext.capabilities.add: Invalid value: \"NET_BIND_SERVICE\": capability may not be added]",
+          "lastTransitionTime": "2022-08-29T13:47:13Z",
+          "lastUpdateTime": "2022-08-29T13:47:13Z",
+          "message": "pods \"reversewords-app-captest-6b89bbc766-\" is forbidden: unable to validate against any security context constraint: [provider \"anyuid\": Forbidden: not usable by user or serviceaccount, spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000800000, 1000809999], provider \"restricted-v2-seccomp\": Forbidden: not usable by user or serviceaccount, provider \"restricted\": Forbidden: not usable by user or serviceaccount, provider \"nonroot-v2\": Forbidden: not usable by user or serviceaccount, provider \"nonroot\": Forbidden: not usable by user or serviceaccount, provider \"restricted-netbind\": Forbidden: not usable by user or serviceaccount, provider \"hostmount-anyuid\": Forbidden: not usable by user or serviceaccount, provider \"machine-api-termination-handler\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork-v2\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork\": Forbidden: not usable by user or serviceaccount, provider \"hostaccess\": Forbidden: not usable by user or serviceaccount, provider \"node-exporter\": Forbidden: not usable by user or serviceaccount, provider \"privileged\": Forbidden: not usable by user or serviceaccount]",
           "reason": "FailedCreate",
           "status": "True",
           "type": "ReplicaFailure"
         }
         ~~~
-      2. At this point you might think that giving access to the `default` SA to the SCC `restricted-netbind` will solve the issue. And that's right, but there is a better way.
+
+    2. At this point you might think that giving access to the `default` SA to the SCC `restricted-netbind` will solve the issue. And that's right, but there is a better way.
+
 3. Let's create a new SA for running our application:
 
     ~~~sh
     oc -n ${NAMESPACE} create sa reverse-words-app
     ~~~
+
 4. Now, it's time to give it access to the `restricted-netbind` SCC:
 
     ~~~sh
     oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-netbind system:serviceaccount:${NAMESPACE}:reverse-words-app
     ~~~
+
 5. Finally, patch the deployment so it uses the new SA we created:
 
     ~~~sh
     oc -n ${NAMESPACE} patch deployment reversewords-app-captest -p '{"spec":{"template":{"spec":{"serviceAccountName":"reverse-words-app"}}}}' --type merge
     ~~~
+
 6. The deployment will run our container now:
 
     ~~~sh
     oc -n ${NAMESPACE} get deployment reversewords-app-captest
     ~~~
 
-    ~~~
+    ~~~sh
     NAME                       READY   UP-TO-DATE   AVAILABLE   AGE
     reversewords-app-captest   1/1     1            1           3m
     ~~~
@@ -496,11 +524,13 @@ In this demo, we are going to use file capabilities to see how we can grant capa
     QUAY_USER=<your_user>
     podman build -f /tmp/reversewords.dockerfile -t quay.io/${QUAY_USER}/reversewords-captest:latest
     ~~~
+
 2. Once the image is built, push it to your favorite registry. In this example we're using quay.io but you can use one of your choice.
 
     ~~~sh
     podman push quay.io/${QUAY_USER}/reversewords-captest:latest
     ~~~
+
 3. Let's create a deployment for the application
 
     >**NOTE**: As you can see we're using the `reverse-words-app` SA for running our deployment, we are not running as UID 0 and we're dropping all capabilities but NET_BIND_SERVICE.
@@ -540,24 +570,18 @@ In this demo, we are going to use file capabilities to see how we can grant capa
                 add:
                 - NET_BIND_SERVICE
                 drop:
-                - CHOWN
-                - DAC_OVERRIDE
-                - FSETID
-                - FOWNER
-                - SETGID
-                - SETUID
-                - SETPCAP
-                - KILL
+                - ALL
     status: {}
     EOF
     ~~~
+
 4. The pod is running and it binded to the port 80 even though it's running under `restricted-netbind` SCC and with a nonroot UID
 
     ~~~sh
     oc -n ${NAMESPACE} get pod -l app=reversewords-app-filecaptest -o yaml | grep scc
     ~~~
 
-    ~~~
+    ~~~sh
     openshift.io/scc: restricted-netbind
     ~~~
 
@@ -567,9 +591,7 @@ In this demo, we are going to use file capabilities to see how we can grant capa
 
     > **NOTE**: Since the SCC selected was restricted-netbind, the user assigned to this pod is not uid 0, it belongs to the range allowed by the namespace instead. So basically, you were able to bind the application to a privileged port in the pod's namespace without being root.
 
-    ~~~
+    ~~~sh
     2021/01/29 16:58:28 Starting Reverse Api v0.0.18 Release: NotSet
     2021/01/29 16:58:28 Listening on port 80
     ~~~
-
-

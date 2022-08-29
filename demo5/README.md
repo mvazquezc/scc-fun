@@ -12,6 +12,7 @@ We have a workload that requires binding to port 80. We create the deployment bu
     NAMESPACE=debug-sccs
     oc create ns ${NAMESPACE}
     ~~~
+
 2. Create the following deployment
 
     ~~~sh
@@ -46,11 +47,13 @@ We have a workload that requires binding to port 80. We create the deployment bu
     status: {}
     EOF
     ~~~
+
 3. Debug why pod is failing and fix the issue using an SCC from the ones included in OpenShift out of the box.
 
 **Solution**
 
 <details>
+
   <summary>Click here to see solution</summary>
 
   1. Check the pod logs
@@ -59,43 +62,51 @@ We have a workload that requires binding to port 80. We create the deployment bu
       oc -n ${NAMESPACE} logs -l app=reversewords-app
       ~~~
 
-      ~~~
+      ~~~sh
       2021/02/08 10:58:34 Starting Reverse Api v0.0.17 Release: NotSet
       2021/02/08 10:58:34 Listening on port 80
       2021/02/08 10:58:34 listen tcp :80: bind: permission denied
       ~~~
+
   2. From the logs we can see that the pod doesn't have permissions to bind to port 80.
+
   3. We could bind to that port if we were running as UID 0.
+
   4. Create a ServiceAccount for running our deployment workloads:
   
       ~~~sh
       oc -n ${NAMESPACE} create serviceaccount reversewordsapp
       ~~~
+
   5. Assign the SCC `anyuid` to the SA:
 
       ~~~sh
       oc -n ${NAMESPACE} adm policy add-scc-to-user anyuid -z reversewordsapp
       ~~~
-  6. Patch the deployment so it uses the new SA we created:
+
+  6. Patch the deployment, so it uses the new SA we created:
 
       ~~~sh
       oc -n ${NAMESPACE} patch deployment reversewords-app -p '{"spec":{"template":{"spec":{"serviceAccountName":"reversewordsapp"}}}}' --type merge
       ~~~
+
   7. Patch the deployment so container `reversewords` runs with UID 0:
 
       ~~~sh
       oc -n ${NAMESPACE} patch deployment reversewords-app -p '{"spec":{"template":{"spec":{"$setElementOrder/containers":[{"name":"reversewords"}],"containers":[{"name":"reversewords","securityContext":{"runAsUser":0}}]}}}}'
       ~~~
+
   8. Check pod logs:
 
       ~~~sh
       oc -n ${NAMESPACE} logs -l app=reversewords-app
       ~~~
 
-      ~~~
+      ~~~sh
       2021/02/08 11:03:21 Starting Reverse Api v0.0.17 Release: NotSet
       2021/02/08 11:03:21 Listening on port 80
       ~~~
+
 </details>
 
 ## **Hands-on Demo 2**
@@ -107,6 +118,7 @@ We have a workload that requires mounting a hostpath. We create the deployment b
     ~~~sh
     NAMESPACE=debug-sccs
     ~~~
+
 2. Create the following deployment
 
     ~~~sh
@@ -146,6 +158,7 @@ We have a workload that requires mounting a hostpath. We create the deployment b
     status: {}
     EOF
     ~~~
+
 3. Debug why pod is not being created and fix the issue using a custom SCC.
 
 **Solution**
@@ -159,38 +172,55 @@ We have a workload that requires mounting a hostpath. We create the deployment b
       oc -n ${NAMESPACE} get deployment reversewords-app-hostpath -o yaml | grep -A100  ^status:
       ~~~
 
-      ~~~
+      ~~~sh
       status:
         conditions:
-        - lastTransitionTime: "2021-02-08T11:24:05Z"
-          lastUpdateTime: "2021-02-08T11:24:05Z"
-          message: Created new replica set "reversewords-app-hostpath-598657994b"
+        - lastTransitionTime: "2022-08-29T15:26:36Z"
+          lastUpdateTime: "2022-08-29T15:26:36Z"
+          message: Created new replica set "reversewords-app-hostpath-6f488c7cdf"
           reason: NewReplicaSetCreated
           status: "True"
           type: Progressing
-        - lastTransitionTime: "2021-02-08T11:24:05Z"
-          lastUpdateTime: "2021-02-08T11:24:05Z"
+        - lastTransitionTime: "2022-08-29T15:26:36Z"
+          lastUpdateTime: "2022-08-29T15:26:36Z"
           message: Deployment does not have minimum availability.
           reason: MinimumReplicasUnavailable
           status: "False"
           type: Available
-        - lastTransitionTime: "2021-02-08T11:24:05Z"
-          lastUpdateTime: "2021-02-08T11:24:05Z"
-          message: 'pods "reversewords-app-hostpath-598657994b-" is forbidden: unable to validate against any security context constraint: [spec.volumes[0]: Invalid value: "hostPath": hostPath volumes are not allowed to be used]'
+        - lastTransitionTime: "2022-08-29T15:26:36Z"
+          lastUpdateTime: "2022-08-29T15:26:36Z"
+          message: 'pods "reversewords-app-hostpath-6f488c7cdf-" is forbidden: unable to
+            validate against any security context constraint: [provider "anyuid": Forbidden:
+            not usable by user or serviceaccount, spec.volumes[0]: Invalid value: "hostPath":
+            hostPath volumes are not allowed to be used, provider "restricted": Forbidden:
+            not usable by user or serviceaccount, provider "nonroot-v2": Forbidden: not
+            usable by user or serviceaccount, provider "nonroot": Forbidden: not usable
+            by user or serviceaccount, provider "hostmount-anyuid": Forbidden: not usable
+            by user or serviceaccount, provider "machine-api-termination-handler": Forbidden:
+            not usable by user or serviceaccount, provider "hostnetwork-v2": Forbidden:
+            not usable by user or serviceaccount, provider "hostnetwork": Forbidden: not
+            usable by user or serviceaccount, provider "hostaccess": Forbidden: not usable
+            by user or serviceaccount, provider "node-exporter": Forbidden: not usable by
+            user or serviceaccount, provider "privileged": Forbidden: not usable by user
+            or serviceaccount]'
           reason: FailedCreate
           status: "True"
           type: ReplicaFailure
         observedGeneration: 1
         unavailableReplicas: 1
       ~~~
+
   2. From the status we can see that the pod cannot be validated against any SCC which allow hostPath mounts.
+
   3. We could mount that path if we had access to an SCC which allows this kind of mounts.
+
   4. Create a ServiceAccount for running our deployment workloads:
   
       ~~~sh
       oc -n ${NAMESPACE} create serviceaccount reversewordsapp-hostpath
       ~~~
-  5. Create a SCC based on the restricted one but with permissions to mount `hostPath` volumes:
+
+  5. Create an SCC based on the restricted one but with permissions to mount `hostPath` volumes:
 
       > **NOTE**: We added `hostPath` to the list of allowed volumes. And set `allowHostDirVolumePlugin` to `true`.
 
@@ -202,10 +232,7 @@ We have a workload that requires mounting a hostpath. We create the deployment b
       priority: null
       readOnlyRootFilesystem: false
       requiredDropCapabilities:
-      - KILL
-      - MKNOD
-      - SETUID
-      - SETGID
+      - ALL
       runAsUser:
         type: MustRunAsRange
       seLinuxContext:
@@ -236,52 +263,59 @@ We have a workload that requires mounting a hostpath. We create the deployment b
       groups: []
       EOF
       ~~~
-  5. Assign the SCC `restricted-hostpathmount` to the SA:
+
+  6. Assign the SCC `restricted-hostpathmount` to the SA:
 
       ~~~sh
       oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-hostpathmount -z reversewordsapp-hostpath
       ~~~
-  6. Patch the deployment so it uses the new SA we created:
+
+  7. Patch the deployment so it uses the new SA we created:
 
       ~~~sh
       oc -n ${NAMESPACE} patch deployment reversewords-app-hostpath -p '{"spec":{"template":{"spec":{"serviceAccountName":"reversewordsapp-hostpath"}}}}' --type merge
       ~~~
-  7. Scale the deployment to 0 and back to 1 so it gets the latest configuration:
+  
+  8. Scale the deployment to 0 and back to 1 so it gets the latest configuration:
 
       ~~~sh
       oc -n ${NAMESPACE} scale deployment reversewords-app-hostpath --replicas=0
       oc -n ${NAMESPACE} scale deployment reversewords-app-hostpath --replicas=1
       ~~~
-  8. Check pod logs:
+  
+  9. Check pod logs:
 
       ~~~sh
       oc -n ${NAMESPACE} logs -l app=reversewords-app-hostpath
       ~~~
 
-      ~~~
+      ~~~sh
       2021/02/08 11:34:21 Starting Reverse Api v0.0.17 Release: NotSet
       2021/02/08 11:34:21 Listening on port 8080
       ~~~
-  9. List our hostPath volume:
+
+  10. List our hostPath volume:
 
       ~~~sh
       oc -n ${NAMESPACE} exec deploy/reversewords-app-hostpath -- ls -l /test-mount/test.txt
       ~~~
 
-      ~~~
+      ~~~sh
       -rw-r--r--. 1 root root 0 Feb  8 11:34 /test-mount/test.txt
       ~~~
+
 </details>
 
 ## **Hands-on Demo 3**
 
-We have a workload that requires running with a given UID (1024). We created the deployment but pods are not being created. 
+We have a workload that requires running with a given UID (1024). We created the deployment, but pods are not being created.
 
 1. Set the namespace for running our tests:
 
     ~~~sh
     NAMESPACE=debug-sccs
     ~~~
+
 2. Create the following deployment
 
     ~~~sh
@@ -315,6 +349,7 @@ We have a workload that requires running with a given UID (1024). We created the
     status: {}
     EOF
     ~~~
+
 3. Debug why pod is not being created and fix the issue using an SCC from the ones included in OpenShift out of the box.
 
 **Solution**
@@ -328,71 +363,94 @@ We have a workload that requires running with a given UID (1024). We created the
       oc -n ${NAMESPACE} get deployment reversewords-app-uid -o yaml | grep -A100  ^status:
       ~~~
 
-      ~~~
+      ~~~sh
       status:
         conditions:
-        - lastTransitionTime: "2021-02-08T11:56:35Z"
-          lastUpdateTime: "2021-02-08T11:56:35Z"
-          message: Created new replica set "reversewords-app-uid-7b9c7c7f59"
+        - lastTransitionTime: "2022-08-29T15:30:36Z"
+          lastUpdateTime: "2022-08-29T15:30:36Z"
+          message: Created new replica set "reversewords-app-uid-5d7dd99778"
           reason: NewReplicaSetCreated
           status: "True"
           type: Progressing
-        - lastTransitionTime: "2021-02-08T11:56:35Z"
-          lastUpdateTime: "2021-02-08T11:56:35Z"
+        - lastTransitionTime: "2022-08-29T15:30:36Z"
+          lastUpdateTime: "2022-08-29T15:30:36Z"
           message: Deployment does not have minimum availability.
           reason: MinimumReplicasUnavailable
           status: "False"
           type: Available
-        - lastTransitionTime: "2021-02-08T11:56:35Z"
-          lastUpdateTime: "2021-02-08T11:56:35Z"
-          message: 'pods "reversewords-app-uid-7b9c7c7f59-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.runAsUser: Invalid value: 1024: must be in the ranges: [1000610000, 1000619999]]'
+        - lastTransitionTime: "2022-08-29T15:30:36Z"
+          lastUpdateTime: "2022-08-29T15:30:36Z"
+          message: 'pods "reversewords-app-uid-5d7dd99778-" is forbidden: unable to validate
+            against any security context constraint: [provider "anyuid": Forbidden: not
+            usable by user or serviceaccount, spec.containers[0].securityContext.runAsUser:
+            Invalid value: 1024: must be in the ranges: [1000820000, 1000829999], provider
+            "restricted": Forbidden: not usable by user or serviceaccount, provider "nonroot-v2":
+            Forbidden: not usable by user or serviceaccount, provider "nonroot": Forbidden:
+            not usable by user or serviceaccount, provider "restricted-hostpathmount": Forbidden:
+            not usable by user or serviceaccount, provider "hostmount-anyuid": Forbidden:
+            not usable by user or serviceaccount, provider "machine-api-termination-handler":
+            Forbidden: not usable by user or serviceaccount, provider "hostnetwork-v2":
+            Forbidden: not usable by user or serviceaccount, provider "hostnetwork": Forbidden:
+            not usable by user or serviceaccount, provider "hostaccess": Forbidden: not
+            usable by user or serviceaccount, provider "node-exporter": Forbidden: not usable
+            by user or serviceaccount, provider "privileged": Forbidden: not usable by user
+            or serviceaccount]'
           reason: FailedCreate
           status: "True"
           type: ReplicaFailure
         observedGeneration: 1
         unavailableReplicas: 1
+
       ~~~
+
   2. From the status we can see that the pod cannot be validated against any SCC which allow running with an arbitrary UID.
+
   3. Create a ServiceAccount for running our deployment workloads:
   
       ~~~sh
       oc -n ${NAMESPACE} create serviceaccount reversewordsapp-uid
       ~~~
-  4. We have a couple SCCs that can make this work `anyuid` and `nonroot`. Since we don't need to run with UID 0, `nonroot` is a better choice.
-  5. Assign the SCC `nonroot` to the SA:
+
+  4. We have a couple SCCs that can make this work `anyuid` and `nonroot-v2`. Since we don't need to run with UID 0, `nonroot-v2` is a better choice.
+
+  5. Assign the SCC `nonroot-v2` to the SA:
 
       ~~~sh
-      oc -n ${NAMESPACE} adm policy add-scc-to-user nonroot -z reversewordsapp-uid
+      oc -n ${NAMESPACE} adm policy add-scc-to-user nonroot-v2 -z reversewordsapp-uid
       ~~~
-  6. Patch the deployment so it uses the new SA we created:
+
+  6. Patch the deployment, so it uses the new SA we created:
 
       ~~~sh
       oc -n ${NAMESPACE} patch deployment reversewords-app-uid -p '{"spec":{"template":{"spec":{"serviceAccountName":"reversewordsapp-uid"}}}}' --type merge
       ~~~
+
   7. Check pod logs:
 
       ~~~sh
       oc -n ${NAMESPACE} logs -l app=reversewords-app-uid
       ~~~
 
-      ~~~
+      ~~~sh
       2021/02/08 12:01:42 Starting Reverse Api v0.0.17 Release: NotSet
       2021/02/08 12:01:42 Listening on port 8080
       ~~~
-  9. Check UID assigned to the container:
+
+  8. Check UID assigned to the container:
 
       ~~~sh
       oc -n ${NAMESPACE} exec deploy/reversewords-app-uid -- whoami
       ~~~
 
-      ~~~
+      ~~~sh
       1024
       ~~~
+
 </details>
 
 ## **Hands-on Demo 4**
 
-We have created a custom SCC based on the `restricted` one, we want all pods in the namespace `debug-sccs` using the `custom-scc` SA to run with the `restricted-custom` SCC but for some reason, pods are getting a different SCC assigned.
+We have created a custom SCC based on the `restricted-v2` one, we want all pods in the namespace `debug-sccs` using the `custom-scc` SA to run with the `restricted-custom` SCC but for some reason, pods are getting a different SCC assigned.
  
 Debug what happens and change the required configurations so we get the `custom-scc` assigned.
 
@@ -401,24 +459,38 @@ Debug what happens and change the required configurations so we get the `custom-
     ~~~sh
     NAMESPACE=debug-sccs
     ~~~
+
 2. Create the `restricted-custom` SCC:
 
     ~~~sh
     cat <<EOF | oc create -f -
+    apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
-      name: restricted-custom
+      name: restricted-v2-custom
+    allowHostDirVolumePlugin: false
+    allowHostIPC: false
+    allowHostNetwork: false
+    allowHostPID: false
+    allowHostPorts: false
+    allowPrivilegeEscalation: false
+    allowPrivilegedContainer: false
+    allowedCapabilities:
+    - NET_BIND_SERVICE
+    defaultAddCapabilities: null
+    fsGroup:
+      type: MustRunAs
+    groups: []
     priority: null
     readOnlyRootFilesystem: false
     requiredDropCapabilities:
-    - KILL
-    - MKNOD
-    - SETUID
-    - SETGID
+    - ALL
     runAsUser:
       type: MustRunAsRange
     seLinuxContext:
       type: MustRunAs
+    seccompProfiles:
+    - runtime/default
     supplementalGroups:
       type: RunAsAny
     users: []
@@ -429,30 +501,19 @@ Debug what happens and change the required configurations so we get the `custom-
     - persistentVolumeClaim
     - projected
     - secret
-    allowHostDirVolumePlugin: false
-    allowHostIPC: false
-    allowHostNetwork: false
-    allowHostPID: false
-    allowHostPorts: false
-    allowPrivilegeEscalation: true
-    allowPrivilegedContainer: false
-    allowedCapabilities: null
-    apiVersion: security.openshift.io/v1
-    defaultAddCapabilities: null
-    fsGroup:
-      type: MustRunAs
-    groups: []
     EOF
     ~~~
+
 3. Create the `custom-scc` SA :
 
     ~~~sh
     oc -n ${NAMESPACE} create sa custom-scc
     ~~~
+
 4. Give access to `custom-scc` to the `restricted-custom` SCC:
 
     ~~~sh
-    oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-custom system:serviceaccount:${NAMESPACE}:custom-scc
+    oc -n ${NAMESPACE} adm policy add-scc-to-user restricted-v2-custom system:serviceaccount:${NAMESPACE}:custom-scc
     ~~~
 
 5. Create the following deployment:
@@ -486,6 +547,7 @@ Debug what happens and change the required configurations so we get the `custom-
     status: {}
     EOF
     ~~~
+
 6. Check the SCC assigned to the pod:
 
     ~~~sh
@@ -493,10 +555,12 @@ Debug what happens and change the required configurations so we get the `custom-
     ~~~
 
     > **NOTE**: `restricted` SCC was applied instead of `restricted-custom`.
-    ~~~
+
+    ~~~sh
     NAME                                         APPLIED SCC
     reversewords-app-customscc-b697b8c5d-w52hn   restricted
     ~~~
+
 7. Debug why pod is not being assigned the desired SCC and fix the issue by modifying the `custom-scc` as needed.
 
 **Solution**
@@ -504,41 +568,44 @@ Debug what happens and change the required configurations so we get the `custom-
 <details>
   <summary>Click here to see solution</summary>
   
-  1. Remember that all authenticated users have access to the `restricted` SCC and that the SCCs are ordered as follows:
+  1. Remember that all authenticated users have access to the `restricted-v2` SCC and that the SCCs are ordered as follows:
 
       1. If the SCCs have different priorities, higher priority first.
       2. If priority is the same, the most restrictive first.
       3. If priority and restriction level are the same, by alphabetical order first.
   2. Our SCCs have the same priority `null` with equals to 0.
   3. Our SCCs have the same restriction level.
-  4. Our custom SCC when ordered alphabeticaly will be after the `restricted` one.
-  5. We need to increase the priority of the `restricted-custom` SCC so it has more priority and gets 1st on the list:
+  4. Our custom SCC when ordered alphabetically will be after the `restricted` one.
+  5. We need to increase the priority of the `restricted-v2-custom` SCC, so it has more priority and gets 1st on the list:
 
       ~~~sh
-      oc patch scc restricted-custom -p '{"priority":1}' --type merge
+      oc patch scc restricted-v2-custom -p '{"priority":1}' --type merge
       ~~~
+
   6. Force the app pod to be recreated:
 
       ~~~sh
       oc -n ${NAMESPACE} delete pod -l app=reversewords-app-customscc
       ~~~
+
   7. Check the SCC assigned to the new pod:
 
       ~~~sh
       oc -n ${NAMESPACE} get pod -l app=reversewords-app-customscc -o 'custom-columns=NAME:metadata.name,APPLIED SCC:metadata.annotations.openshift\.io/scc'
       ~~~
 
-      > **NOTE**: This time the `restricted-custom` SCC got prioritized.
-      
-      ~~~
+      > **NOTE**: This time the `restricted-v2-custom` SCC got prioritized.
+
+      ~~~sh
       NAME                                         APPLIED SCC
       reversewords-app-customscc-b697b8c5d-p2ltv   restricted-custom
       ~~~
+
 </details>
 
 ## **Hands-on Demo 5**
 
-We have a NFS server which is providing shared storage. The NFS share is configured so it can be accessed by the group `5000`. We need our application to connect to this share and read/write the content inside the share. For some reason we are not able to read/write the content. 
+We have a NFS server which is providing shared storage. The NFS share is configured, so it can be accessed by the group `5000`. We need our application to connect to this share and read/write the content inside the share. For some reason we are not able to read/write the content. 
 
 Debug the issue and fix the required configurations so our application can read/write the content from the share.
 
@@ -548,6 +615,7 @@ Debug the issue and fix the required configurations so our application can read/
     NAMESPACE=debug-scc-shared-storage
     oc create ns ${NAMESPACE}
     ~~~
+
 2. Create the `nfs-server` deployment:
 
     ~~~sh
@@ -620,6 +688,7 @@ Debug the issue and fix the required configurations so our application can read/
       loadBalancer: {}
     EOF
     ~~~
+
 3. Create a PV and a PVC to be used by the app for attaching to the NFS Server
 
     ~~~sh
@@ -630,7 +699,7 @@ Debug the issue and fix the required configurations so our application can read/
     apiVersion: v1
     kind: PersistentVolume
     metadata:
-      name: nfs-shared-test-volume
+      name: nfs-shared-test-volume-debug
     spec:
       capacity:
         storage: 500Mi
@@ -648,17 +717,18 @@ Debug the issue and fix the required configurations so our application can read/
     apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
-      name: nfs-shared-test-volume-claim
+      name: nfs-shared-test-volume-debug-claim
     spec:
       accessModes:
         - ReadWriteMany
       storageClassName: ""
-      volumeName: nfs-shared-test-volume
+      volumeName: nfs-shared-test-volume-debug
       resources:
         requests:
           storage: 500Mi
     EOF
     ~~~
+
 4. Create the app deployment
 
     ~~~sh
@@ -685,7 +755,7 @@ Debug the issue and fix the required configurations so our application can read/
           volumes:
           - name: test-volume
             persistentVolumeClaim:
-              claimName: nfs-shared-test-volume-claim
+              claimName: nfs-shared-test-volume-debug-claim
           containers:
           - image: quay.io/mavazque/reversewords:ubi8
             name: reversewords
@@ -696,13 +766,14 @@ Debug the issue and fix the required configurations so our application can read/
     status: {}
     EOF
     ~~~
+
 5. Try to read/write to the NFS Share
 
     ~~~sh
     oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- cat /mnt/testfile.txt
     ~~~
 
-    ~~~
+    ~~~sh
     cat: /mnt/testfile.txt: Permission denied
     command terminated with exit code 1
     ~~~
@@ -711,7 +782,7 @@ Debug the issue and fix the required configurations so our application can read/
     oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- touch /mnt/shared-storage-1
     ~~~
 
-    ~~~
+    ~~~sh
     touch: cannot touch '/mnt/shared-storage-1': Permission denied
     command terminated with exit code 1
     ~~~
@@ -728,7 +799,7 @@ Debug the issue and fix the required configurations so our application can read/
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- ls -ld /mnt
       ~~~
 
-      ~~~
+      ~~~sh
       drwxrwsr-x. 1 5000 5000 26 Feb 16 19:03 /mnt
       ~~~
 
@@ -736,41 +807,46 @@ Debug the issue and fix the required configurations so our application can read/
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- ls -lrt /mnt/
       ~~~
 
-      ~~~
+      ~~~sh
       total 4
       -rw-rw----. 1 5000 5000 38 Feb 16 18:26 testfile.txt
       ~~~
+  
   3. As we can see, the folder is owned by UID,GID 5000 and so is the file.
+  
   4. Let's check which user is running our container:
 
       ~~~sh
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- id
       ~~~
 
-      ~~~
+      ~~~sh
       uid=1000700000(1000700000) gid=0(root) groups=0(root),1000700000
       ~~~
+
   5. As you can see the user is not part of the GID 5000, so we need to fix that:
 
       ~~~sh
       oc -n ${NAMESPACE} patch deployment reversewords-app-shared-storage -p '{"spec":{"template":{"spec":{"securityContext":{"supplementalGroups":[5000]}}}}}'
       ~~~
+
   6. If we check the user running the container again:
 
       ~~~sh
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- id
       ~~~
 
-      ~~~
+      ~~~sh
       uid=1000700000(1000700000) gid=0(root) groups=0(root),5000,1000700000
       ~~~
-  7. Since now we are part of the group we will be able to read and write to the shared storage:
+
+  7. Since now, we are part of the group we will be able to read and write to the shared storage:
 
       ~~~sh
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- cat /mnt/testfile.txt
       ~~~
 
-      ~~~
+      ~~~sh
       This is a testfile owned by user 5000
       ~~~
 
@@ -779,7 +855,8 @@ Debug the issue and fix the required configurations so our application can read/
       oc -n ${NAMESPACE} exec -ti deployment/reversewords-app-shared-storage -- ls -l /mnt/shared-storage-1
       ~~~
 
-      ~~~
+      ~~~sh
       -rw-r--r--. 1 1000700000 5000 0 Feb 17 11:17 /mnt/shared-storage-1
       ~~~
+
 </details>
