@@ -322,7 +322,7 @@ Now that we introduced the app that we will be using we will see how a user can 
         root     4162199 4162111  0 16:48 pts/0    00:00:00 /usr/bin/coreutils --coreutils-prog-shebang=sleep /usr/bin/sleep 288
         ~~~
 
-At this point we have demonstrated how we can abuse setuid binaries, now let's see what we can do on the node to know when this happens. 
+At this point we have demonstrated how we can abuse setuid binaries, now let's see what we can do on the node to know when this happens.
 
 1. We will use auditd rules to monitor when a process performs privilege escalation by changing from non-root uid to root uid. The audit rule we will use is the following one:
 
