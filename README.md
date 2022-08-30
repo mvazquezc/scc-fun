@@ -46,3 +46,9 @@ Debugging SCCs Issues, apply your knowledge around SCCs to solve some issues rel
 Privilege Escalation bit, learn how to control if your containers can run privilege escalation operators through the use of _no_new_privs_ bit.
 
 [Start Here](./demo6/README.md)
+
+## **Demo 7**
+
+Pod Security Admission, learn how it's configured in OCP 4.11 and what configurations you can do.
+
+[Start Here](./demo7/README.md)
