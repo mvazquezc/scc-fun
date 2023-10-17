@@ -4,22 +4,22 @@ In this demo we are going to show how privilege escalation can be managed throug
 
 ## **Hands-on Demo 1**
 
-> **NOTE**: Below tests were run in a Fedora 35 machine with Podman v3.4.4, results may vary when using other O.S / Podman version.
+> **NOTE**: Below tests were run in a Fedora 38 machine with Podman v4.6.2, results may vary when using other O.S / Podman versions.
 
 In this demo we will see how _no_new_privs_ can be used to avoid SUID binaries.
 
 1. Create a small container image that has the `whoami` binary configured with SETUID bit
 
     ~~~sh
-    cat <<EOF > whoami-setuid.dockerfile
-    FROM fedora:36
+    cat <<EOF > /tmp/whoami-setuid.dockerfile
+    FROM fedora:38
     RUN chmod +s /usr/bin/whoami
     ENTRYPOINT /usr/bin/whoami
     EOF
     ~~~
 
     ~~~sh
-    podman build -f whoami-setuid.dockerfile -t whoami-setuid
+    podman build -f /tmp/whoami-setuid.dockerfile -t whoami-setuid
     ~~~
 
 2. If we run the image as user `1024` without setting the _no_new_privs_ bit this is what we get
@@ -65,7 +65,7 @@ In this demo we will see how _no_new_privs_ can be used to avoid users to use bi
     ~~~
 
     ~~~sh
-    /usr/bin/reverse-words = cap_net_bind_service+ep
+    /usr/bin/reverse-words = cap_net_bind_service+eip
     ~~~
 
 3. Get the container's thread capabilities
@@ -101,8 +101,8 @@ In this demo we will see how _no_new_privs_ can be used to avoid users to use bi
     > **NOTE**: As expected, the binary was able to get the `NET_BIND_SERVICE` capability
 
     ~~~sh
-    2021/04/23 19:30:58 Starting Reverse Api v0.0.18 Release: NotSet
-    2021/04/23 19:30:58 Listening on port 80
+    2023/10/17 07:26:06 Starting Reverse Api v0.0.21 Release: NotSet
+    2023/10/17 07:26:06 Listening on port 80
     ~~~
 
 6. We are going to run the container with the _no_new_privs` bit set
@@ -120,9 +120,9 @@ In this demo we will see how _no_new_privs_ can be used to avoid users to use bi
     > **NOTE**: This time the binary couldn't get the capability into the thread's effective set due to the _no_new_privs_ bit.e
 
     ~~~sh
-    2021/04/23 19:31:42 Starting Reverse Api v0.0.18 Release: NotSet
-    2021/04/23 19:31:42 Listening on port 80
-    2021/04/23 19:31:42 listen tcp :80: bind: permission denied
+    2023/10/17 07:26:19 Starting Reverse Api v0.0.21 Release: NotSet
+    2023/10/17 07:26:19 Listening on port 80
+    2023/10/17 07:26:19 listen tcp :80: bind: permission denied
     ~~~
 
 8. If we run with root this time and with no_new_privs
@@ -138,14 +138,14 @@ In this demo we will see how _no_new_privs_ can be used to avoid users to use bi
     ~~~
 
     ~~~sh
-    CapInh: 00000000800405fb
+    CapInh: 0000000000000000
     CapPrm: 00000000800405fb
     CapEff: 00000000800405fb
     CapBnd: 00000000800405fb
     CapAmb: 0000000000000000
     ~~~
 
-10. Decode thread capabilities
+10. Decode thread effective capabilities
 
     ~~~sh
     capsh --decode=00000000800405fb
@@ -162,15 +162,15 @@ In this demo we will see how _no_new_privs_ can be used to avoid users to use bi
     ~~~
 
     ~~~sh
-    2021/04/23 19:33:05 Starting Reverse Api v0.0.18 Release: NotSet
-    2021/04/23 19:33:05 Listening on port 80
+    2023/10/17 07:27:26 Starting Reverse Api v0.0.21 Release: NotSet
+    2023/10/17 07:27:26 Listening on port 80
     ~~~
 
 ## **Hands-on Demo 3**
 
 In this demo we're going to show how we can audit containers abusing setuid/sudo on an OpenShift cluster.
 
-Even if file capabilities can cause a privilege escalation we have great tools today to avoid pods from getting such capabilities via SCCs, where the restricted-v2 SCC does a pretty good job limiting the number of CAPS available for pods by default. On the other hand, we have the "becoming root/executing as root" problem, which in this case new v2 SCCs introduced in OCP 4.11 are helping to mitigate, since them have the setting allowPrivilegeEscalation set to false.
+Even if file capabilities can cause a privilege escalation we have great tools today to avoid pods from getting such capabilities via SCCs, where the restricted-v2 SCC does a pretty good job limiting the number of CAPS available for pods by default. On the other hand, we have the "becoming root/executing as root" problem, which in this case new v2 SCCs introduced back in OCP 4.11 are helping to mitigate as v2 SCCs have the setting `allowPrivilegeEscalation` set to false.
 
 In order to showcase a scenario where an application is abusing the setuid, kudos to [r/linuxquestions](https://www.reddit.com/r/linuxquestions/) for providing the testing app (quay.io/fherrman/my-ubi-setuid:0.4):
 
@@ -319,7 +319,7 @@ Now that we introduced the app that we will be using we will see how a user can 
         > **NOTE**: As you can see we're running as root.
 
         ~~~sh
-        root     4162199 4162111  0 16:48 pts/0    00:00:00 /usr/bin/coreutils --coreutils-prog-shebang=sleep /usr/bin/sleep 288
+        root     1352231 1352181  0 07:31 pts/0    00:00:00 /usr/bin/coreutils --coreutils-prog-shebang=sleep /usr/bin/sleep 288
         ~~~
 
 At this point we have demonstrated how we can abuse setuid binaries, now let's see what we can do on the node to know when this happens.

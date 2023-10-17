@@ -9,7 +9,7 @@ It's highly recommended reviewing the following blogs in order to understand the
 
 ## **Versions used**
 
-Labs were last tested with OCP v4.11.0.
+Labs have been tested with OCP v4.14.0.
 
 ## **Demo 1**
 
@@ -49,6 +49,6 @@ Privilege Escalation bit, learn how to control if your containers can run privil
 
 ## **Demo 7**
 
-Pod Security Admission, learn how it's configured in OCP 4.11 and what configurations you can do.
+Pod Security Admission, learn how it's configured in OCP 4.14 and what configurations you can do.
 
 [Start Here](./demo7/README.md)

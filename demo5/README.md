@@ -63,9 +63,9 @@ We have a workload that requires binding to port 80. We create the deployment bu
       ~~~
 
       ~~~sh
-      2021/02/08 10:58:34 Starting Reverse Api v0.0.17 Release: NotSet
-      2021/02/08 10:58:34 Listening on port 80
-      2021/02/08 10:58:34 listen tcp :80: bind: permission denied
+      2023/10/16 17:45:13 Starting Reverse Api v0.0.21 Release: NotSet
+      2023/10/16 17:45:13 Listening on port 80
+      2023/10/16 17:45:13 listen tcp :80: bind: permission denied
       ~~~
 
   2. From the logs we can see that the pod doesn't have permissions to bind to port 80.
@@ -103,8 +103,8 @@ We have a workload that requires binding to port 80. We create the deployment bu
       ~~~
 
       ~~~sh
-      2021/02/08 11:03:21 Starting Reverse Api v0.0.17 Release: NotSet
-      2021/02/08 11:03:21 Listening on port 80
+      2023/10/16 17:45:28 Starting Reverse Api v0.0.21 Release: NotSet
+      2023/10/16 17:45:28 Listening on port 80
       ~~~
 
 </details>
@@ -175,21 +175,10 @@ We have a workload that requires mounting a hostpath. We create the deployment b
       ~~~sh
       status:
         conditions:
-        - lastTransitionTime: "2022-08-29T15:26:36Z"
-          lastUpdateTime: "2022-08-29T15:26:36Z"
-          message: Created new replica set "reversewords-app-hostpath-6f488c7cdf"
-          reason: NewReplicaSetCreated
-          status: "True"
-          type: Progressing
-        - lastTransitionTime: "2022-08-29T15:26:36Z"
-          lastUpdateTime: "2022-08-29T15:26:36Z"
-          message: Deployment does not have minimum availability.
-          reason: MinimumReplicasUnavailable
-          status: "False"
-          type: Available
-        - lastTransitionTime: "2022-08-29T15:26:36Z"
-          lastUpdateTime: "2022-08-29T15:26:36Z"
-          message: 'pods "reversewords-app-hostpath-6f488c7cdf-" is forbidden: unable to
+        <OUTPUT_OMITTED>
+        - lastTransitionTime: "2023-10-16T17:45:41Z"
+          lastUpdateTime: "2023-10-16T17:45:41Z"
+          message: 'pods "reversewords-app-hostpath-78f98b8466-" is forbidden: unable to
             validate against any security context constraint: [provider "anyuid": Forbidden:
             not usable by user or serviceaccount, spec.volumes[0]: Invalid value: "hostPath":
             hostPath volumes are not allowed to be used, provider "restricted": Forbidden:
@@ -290,8 +279,8 @@ We have a workload that requires mounting a hostpath. We create the deployment b
       ~~~
 
       ~~~sh
-      2021/02/08 11:34:21 Starting Reverse Api v0.0.17 Release: NotSet
-      2021/02/08 11:34:21 Listening on port 8080
+      2023/10/16 17:47:53 Starting Reverse Api v0.0.21 Release: NotSet
+      2023/10/16 17:47:53 Listening on port 8080
       ~~~
 
   10. List our hostPath volume:
@@ -366,21 +355,10 @@ We have a workload that requires running with a given UID (1024). We created the
       ~~~sh
       status:
         conditions:
-        - lastTransitionTime: "2022-08-29T15:30:36Z"
-          lastUpdateTime: "2022-08-29T15:30:36Z"
-          message: Created new replica set "reversewords-app-uid-5d7dd99778"
-          reason: NewReplicaSetCreated
-          status: "True"
-          type: Progressing
-        - lastTransitionTime: "2022-08-29T15:30:36Z"
-          lastUpdateTime: "2022-08-29T15:30:36Z"
-          message: Deployment does not have minimum availability.
-          reason: MinimumReplicasUnavailable
-          status: "False"
-          type: Available
-        - lastTransitionTime: "2022-08-29T15:30:36Z"
-          lastUpdateTime: "2022-08-29T15:30:36Z"
-          message: 'pods "reversewords-app-uid-5d7dd99778-" is forbidden: unable to validate
+        <OUTPUT_OMITTED>
+        - lastTransitionTime: "2023-10-16T17:48:37Z"
+          lastUpdateTime: "2023-10-16T17:48:37Z"
+          message: 'pods "reversewords-app-uid-85b4f5f9c5-" is forbidden: unable to validate
             against any security context constraint: [provider "anyuid": Forbidden: not
             usable by user or serviceaccount, spec.containers[0].securityContext.runAsUser:
             Invalid value: 1024: must be in the ranges: [1000820000, 1000829999], provider
@@ -432,8 +410,8 @@ We have a workload that requires running with a given UID (1024). We created the
       ~~~
 
       ~~~sh
-      2021/02/08 12:01:42 Starting Reverse Api v0.0.17 Release: NotSet
-      2021/02/08 12:01:42 Listening on port 8080
+      2023/10/16 17:49:46 Starting Reverse Api v0.0.21 Release: NotSet
+      2023/10/16 17:49:46 Listening on port 8080
       ~~~
 
   8. Check UID assigned to the container:
@@ -554,11 +532,11 @@ Debug what happens and change the required configurations so we get the `custom-
     oc -n ${NAMESPACE} get pod -l app=reversewords-app-customscc -o 'custom-columns=NAME:metadata.name,APPLIED SCC:metadata.annotations.openshift\.io/scc'
     ~~~
 
-    > **NOTE**: `restricted` SCC was applied instead of `restricted-custom`.
+    > **NOTE**: `restricted-v2` SCC was applied instead of `restricted-custom`.
 
     ~~~sh
     NAME                                         APPLIED SCC
-    reversewords-app-customscc-b697b8c5d-w52hn   restricted
+    reversewords-app-customscc-b697b8c5d-w52hn   restricted-v2
     ~~~
 
 7. Debug why pod is not being assigned the desired SCC and fix the issue by modifying the `custom-scc` as needed.
@@ -576,11 +554,12 @@ Debug what happens and change the required configurations so we get the `custom-
   2. Our SCCs have the same priority `null` with equals to 0.
   3. Our SCCs have the same restriction level.
   4. Our custom SCC when ordered alphabetically will be after the `restricted` one.
-  5. We need to increase the priority of the `restricted-v2-custom` SCC, so it has more priority and gets 1st on the list:
+  5. We need to increase the priority of the `restricted-v2-custom` SCC, so it has more priority and gets 1st on the list, since this is a Pod we cannotmake use of the `openshift.io/required-scc` annotation:
 
       ~~~sh
       oc patch scc restricted-v2-custom -p '{"priority":1}' --type merge
       ~~~
+
 
   6. Force the app pod to be recreated:
 
@@ -598,7 +577,7 @@ Debug what happens and change the required configurations so we get the `custom-
 
       ~~~sh
       NAME                                         APPLIED SCC
-      reversewords-app-customscc-b697b8c5d-p2ltv   restricted-custom
+      reversewords-app-customscc-b697b8c5d-p2ltv   restricted-v2-custom
       ~~~
 
 </details>
@@ -800,7 +779,7 @@ Debug the issue and fix the required configurations so our application can read/
       ~~~
 
       ~~~sh
-      drwxrwsr-x. 1 5000 5000 26 Feb 16 19:03 /mnt
+      drwxrwsr-x. 1 5000 5000 26 Feb 16  2021 /mnt
       ~~~
 
       ~~~sh
@@ -809,7 +788,7 @@ Debug the issue and fix the required configurations so our application can read/
 
       ~~~sh
       total 4
-      -rw-rw----. 1 5000 5000 38 Feb 16 18:26 testfile.txt
+      -rw-rw----. 1 5000 5000 38 Feb 16  2021 testfile.txt
       ~~~
   
   3. As we can see, the folder is owned by UID,GID 5000 and so is the file.
@@ -856,7 +835,7 @@ Debug the issue and fix the required configurations so our application can read/
       ~~~
 
       ~~~sh
-      -rw-r--r--. 1 1000700000 5000 0 Feb 17 11:17 /mnt/shared-storage-1
+      -rw-r--r--. 1 1000760000 5000 0 Oct 16 18:01 /mnt/shared-storage-1
       ~~~
 
 </details>

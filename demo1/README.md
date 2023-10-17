@@ -115,7 +115,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
             system:masters
     ~~~
 
-5. Assigning SCCs to SAs using Roles is the prefered way to go. During the upcoming demos we will gran direct access to make things easier though.
+5. Assigning SCCs to SAs using Roles is the prefered way to go. During the upcoming demos we will grant direct access to make things easier though.
 
 ## **Hands-on Demo 3**
 
@@ -159,7 +159,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
     EOF
     ~~~
 
-5. Run an scc-review to see which SCC will be assigned to the pod
+5. Run the scc-review command to see which SCC will be assigned to the pod
 
     ~~~sh
     oc -n ${NAMESPACE} policy scc-review -z system:serviceaccount:${NAMESPACE}:testuser -f /tmp/pod-scc-1.yaml 
@@ -180,7 +180,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
     oc -n ${NAMESPACE} get pod pod-scc-1 -o yaml | grep "openshift.io/scc"
     ~~~
 
-    1. As you can see, the `restricted` SCC was granted
+    1. As you can see, the `restricted-v2` SCC was granted
 
         ~~~sh
         openshift.io/scc: restricted-v2
@@ -218,7 +218,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
         anyuid          false   <no value>             MustRunAs   RunAsAny         RunAsAny    RunAsAny   10           false            ["configMap","downwardAPI","emptyDir","persistentVolumeClaim","projected","secret"]
         ~~~
 
-    3. The SCC `anyuid` has a priority of 10 while restricted-v2 has no priority, that means `anyuid` will be preferred even if the pods doesn't need it
+    3. The SCC `anyuid` has a priority of 10 while restricted-v2 has no priority, that means `anyuid` will be preferred even if the pods doesn't need it.
 
 9. Let's create the pod again to see what SCC does it get this time
 
@@ -231,7 +231,7 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
     oc -n ${NAMESPACE} get pod pod-scc-1 -o yaml | grep "openshift.io/scc"
     ~~~
 
-    > **NOTE**: the `anyuid` SCC was granted
+    > **NOTE**: The `anyuid` SCC was granted
 
     ~~~sh
     openshift.io/scc: anyuid
@@ -247,3 +247,86 @@ In this demo we will see how a ServiceAccount can get access to use an SCC (anyu
     NAME        APPLIED SCC
     pod-scc-1   anyuid
     ~~~
+
+10. In the previous step we have seen how priorities will decide which SCC is used to admit the pod in the cluster, starting in OpenShift 4.14 there is a new annotation that we can use to force the use of a specific SCC without having to edit SCC priorities, let's learn how to use it:
+
+    > **NOTE**: The `openshift.io/required-scc` annotation can only be used in workload resources like Deployments, StatefulSets, etc. If you try to use it directly on Pods you will get an admission error.
+
+    1. Create a Deployment without specifying the `required-scc` annotation:
+
+        ~~~sh
+        cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          creationTimestamp: null
+          labels:
+            app: deployment-scc-1
+          name: deployment-scc-1
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: deployment-scc-1
+          strategy: {}
+          template:
+            metadata:
+              creationTimestamp: null
+              labels:
+                app: deployment-scc-1
+            spec:
+              serviceAccountName: testuser
+              containers:
+              - image: quay.io/mavazque/reversewords:latest
+                name: reversewords
+                resources: {}
+        EOF
+        ~~~
+
+    2. If we check the SCC assigned to the resulting Pod we can see that `anyuid` was assigned:
+
+        ~~~sh
+        oc -n ${NAMESPACE} get pod -l app=deployment-scc-1 -o yaml | grep "openshift.io/scc"
+        ~~~
+
+        ~~~sh
+        openshift.io/scc: anyuid
+        ~~~
+
+    3. Our workload doesn't require `anyuid` so let's specify that we want it to use `restricted-v2`:
+
+        ~~~sh
+        oc -n ${NAMESPACE} patch deployment deployment-scc-1 -p '{"spec":{"template":{"metadata":{"annotations":{"openshift.io/required-scc":"restricted-v2"}}}}}' --type merge
+        ~~~
+
+    4. The new pod will be admitted by `restricted-v2`:
+
+        ~~~sh
+        oc -n ${NAMESPACE} get pod -l app=deployment-scc-1 -o yaml | grep "openshift.io/scc"
+        ~~~
+
+        ~~~sh
+        openshift.io/scc: restricted-v2
+        ~~~
+
+    5. If we try to select an SCC that the workload doesn't have access to, the admission will fail:
+
+        ~~~sh
+        oc -n ${NAMESPACE} patch deployment deployment-scc-1 -p '{"spec":{"template":{"metadata":{"annotations":{"openshift.io/required-scc":"privileged"}}}}}' --type merge
+        ~~~
+
+        ~~~sh
+        oc -n ${NAMESPACE} get deployment deployment-scc-1 -o yaml
+        ~~~
+
+        ~~~sh
+        <OUTPUT_OMITTED>
+          - lastTransitionTime: "2023-10-17T14:00:09Z"
+            lastUpdateTime: "2023-10-17T14:00:09Z"
+            message: 'pods "deployment-scc-1-664898bd47-" is forbidden: unable to validate
+              against any security context constraint: provider "privileged": Forbidden: not
+              usable by user or serviceaccount'
+            reason: FailedCreate
+            status: "True"
+            type: ReplicaFailure
+        ~~~

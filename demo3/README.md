@@ -10,7 +10,7 @@ We will see how we can add/drop capabilities in a given container using Podman a
 
 ### **Hands-on Demo**
 
-> **NOTE**: Below tests were run in a Fedora 35 machine with Podman v3.4.4, results may vary when using other O.S / Podman version.
+> **NOTE**: Below tests were run in a Fedora 38 machine with Podman v4.6.2, results may vary when using other O.S / Podman versions.
 
 1. Install podman on your system in case you don't have it yet.
 
@@ -26,11 +26,11 @@ We will see how we can add/drop capabilities in a given container using Podman a
 
         ~~~sh
         CONTAINER_PID=$(podman inspect nginx-cap-test --format {{.State.Pid}})
-        cat /proc/${CONTAINER_PID}/status | grep Cap
+        grep Cap /proc/${CONTAINER_PID}/status
         ~~~
 
         ~~~sh
-        CapInh:	00000000a80425fb
+        CapInh:	0000000000000000
         CapPrm:	00000000a80425fb
         CapEff:	00000000a80425fb
         CapBnd:	00000000a80425fb
@@ -70,7 +70,7 @@ We will see how we can add/drop capabilities in a given container using Podman a
         podman stop nginx-cap-test
         ~~~
 
-4. So by default, podman will configure the capabilities defined [here](https://github.com/containers/common/blob/v0.33.1/pkg/config/default.go#L62-L77) or alternatively the ones configured in its configuration file.
+4. So by default, podman will configure the capabilities defined [here](https://github.com/containers/common/blob/v0.56.0/pkg/config/default.go#L50-L62), or alternatively the ones configured in its configuration file.
 
 We can also drop capabilities not needed by our application, that way we are reducing the attack surface. Let's see.
 
@@ -366,7 +366,7 @@ In this demo we need an SCC so we can run a pod that changes the ownership of th
     spec:
       serviceAccountName: testuser
       containers:
-      - image: registry.centos.org/centos:8
+      - image: quay.io/fedora/fedora:36
         command: ["chown", "-v", "nobody", "/etc/resolv.conf"]
         name: centos
         securityContext:
@@ -457,9 +457,9 @@ In this demo we are going to deploy the application from Demo 1, but this time u
 
         ~~~json
         {
-          "lastTransitionTime": "2022-08-29T13:47:13Z",
-          "lastUpdateTime": "2022-08-29T13:47:13Z",
-          "message": "pods \"reversewords-app-captest-6b89bbc766-\" is forbidden: unable to validate against any security context constraint: [provider \"anyuid\": Forbidden: not usable by user or serviceaccount, spec.containers[0].securityContext.runAsUser: Invalid value: 0: must be in the ranges: [1000800000, 1000809999], provider \"restricted-v2-seccomp\": Forbidden: not usable by user or serviceaccount, provider \"restricted\": Forbidden: not usable by user or serviceaccount, provider \"nonroot-v2\": Forbidden: not usable by user or serviceaccount, provider \"nonroot\": Forbidden: not usable by user or serviceaccount, provider \"restricted-netbind\": Forbidden: not usable by user or serviceaccount, provider \"hostmount-anyuid\": Forbidden: not usable by user or serviceaccount, provider \"machine-api-termination-handler\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork-v2\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork\": Forbidden: not usable by user or serviceaccount, provider \"hostaccess\": Forbidden: not usable by user or serviceaccount, provider \"node-exporter\": Forbidden: not usable by user or serviceaccount, provider \"privileged\": Forbidden: not usable by user or serviceaccount]",
+          "lastTransitionTime": "2023-10-16T16:45:20Z",
+          "lastUpdateTime": "2023-10-16T16:45:20Z",
+          "message": "pods \"reversewords-app-captest-74cd8fb789-\" is forbidden: unable to validate against any security context constraint: [provider \"anyuid\": Forbidden: not usable by user or serviceaccount, provider \"restricted-netbind\": Forbidden: not usable by user or serviceaccount, provider restricted-v2: .containers[0].runAsUser: Invalid value: 0: must be in the ranges: [1000720000, 1000729999], provider \"restricted\": Forbidden: not usable by user or serviceaccount, provider \"nonroot-v2\": Forbidden: not usable by user or serviceaccount, provider \"nonroot\": Forbidden: not usable by user or serviceaccount, provider \"hostmount-anyuid\": Forbidden: not usable by user or serviceaccount, provider \"machine-api-termination-handler\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork-v2\": Forbidden: not usable by user or serviceaccount, provider \"hostnetwork\": Forbidden: not usable by user or serviceaccount, provider \"hostaccess\": Forbidden: not usable by user or serviceaccount, provider \"lvms-vgmanager\": Forbidden: not usable by user or serviceaccount, provider \"lvms-topolvm-node\": Forbidden: not usable by user or serviceaccount, provider \"node-exporter\": Forbidden: not usable by user or serviceaccount, provider \"privileged\": Forbidden: not usable by user or serviceaccount]",
           "reason": "FailedCreate",
           "status": "True",
           "type": "ReplicaFailure"

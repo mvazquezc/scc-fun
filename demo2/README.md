@@ -1,4 +1,4 @@
-# **Secccomp Security Profiles**
+# **Seccomp Security Profiles**
 
 In this demo we will learn how we can work with seccomp profiles for our containers.
 
@@ -8,12 +8,12 @@ We will start by generating a seccomp profile for a local container with podman,
 
 In order to generate our `seccomp` profile we are going to rely on an OCI Hook which will intercept the syscalls made by our container in order to get them added to the seccomp profile.
 
-The OCI Hook project can be found here: https://github.com/containers/oci-seccomp-bpf-hook
+The OCI Hook project can be found here: [https://github.com/containers/oci-seccomp-bpf-hook](https://github.com/containers/oci-seccomp-bpf-hook).
 
-1. Create a VM with CentOS 8 Streams to run our tests. I'm using [kcli](https://github.com/karmab/kcli).
+1. Create a VM with CentOS 9 Streams to run our tests. I'm using [kcli](https://github.com/karmab/kcli).
 
     ~~~sh
-    kcli create vm -i centos8stream -P numcpus=2 -P memory=4096
+    kcli create vm -i centos9stream -P numcpus=2 -P memory=4096
     ~~~
 
 2. Connect to the VM and install `podman` and the `oci-seccomp-bpf-hook`
@@ -21,8 +21,10 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
     > **NOTE**: We need to install kernel-core to get the `kheaders` module required by the hook.
 
     ~~~sh
+    # Connect to the VM
+    kcli ssh
     # Install required tools
-    sudo dnf install -y podman oci-seccomp-bpf-hook jq kernel-core kernel-headers
+    sudo dnf install -y podman oci-seccomp-bpf-hook jq kernel-core kernel-headers runc
     # Reboot the VM
     sudo reboot
     ~~~
@@ -35,8 +37,10 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 
 4. Let's run a test container that runs a ls command
 
+    > **NOTE**: We're using `--runtime /usr/bin/runc` since by default Podman uses crun runtime, but in OCP the default runtime is still runc. You need to generate the profile using the runtime that is available in your cluster.
+
     ~~~sh
-    sudo podman run --rm --runtime /usr/bin/runc --annotation io.containers.trace-syscall="of:/tmp/ls.json" fedora:36 ls / > /dev/null
+    sudo podman run --rm --runtime /usr/bin/runc --annotation io.containers.trace-syscall="of:/tmp/ls.json" fedora:38 ls / > /dev/null
     ~~~
 
 5. The hook has generated the required `seccomp` profile at `/tmp/ls.json` let's review it.
@@ -50,13 +54,13 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 6. Now let's try to use this `seccomp` profile to run the container
 
     ~~~sh
-    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:36 ls /
+    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:38 ls /
     ~~~
 
 7. The container is now running which the minimum possible set of syscall allowed, let's try to change the ls command a bit:
 
     ~~~sh
-    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:36 ls -l /
+    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/ls.json fedora:38 ls -l /
     ~~~
 
     ~~~sh
@@ -68,34 +72,31 @@ The OCI Hook project can be found here: https://github.com/containers/oci-seccom
 8. The hook allow us to pass an input file that will be used as baseline, then we will log the required additional syscalls into a new output file:
 
     ~~~sh
-    sudo podman run --rm --runtime /usr/bin/runc --annotation io.containers.trace-syscall="if:/tmp/ls.json;of:/tmp/lsl.json" fedora:36 ls -l / > /dev/null
+    sudo podman run --rm --runtime /usr/bin/runc --annotation io.containers.trace-syscall="if:/tmp/ls.json;of:/tmp/lsl.json" fedora:38 ls -l / > /dev/null
     ~~~
 
 9. Now we should have a valid seccomp profile at `/tmp/lsl.json` that we can use for running our container:
 
     ~~~sh
-    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/lsl.json fedora:36 ls -l /
+    sudo podman run --rm --runtime /usr/bin/runc --security-opt seccomp=/tmp/lsl.json fedora:38 ls -l /
     ~~~
 
     ~~~sh
-    total 8
-    dr-xr-xr-x.   2 root root    6 Jan 20  2022 afs
-    lrwxrwxrwx.   1 root root    7 Jan 20  2022 bin -> usr/bin
-    dr-xr-xr-x.   2 root root    6 Jan 20  2022 boot
-    drwxr-xr-x.   5 root root  340 Aug 25 17:15 dev
-    drwxr-xr-x.   1 root root   25 Aug 25 17:15 etc
-    drwxr-xr-x.   2 root root    6 Jan 20  2022 home
-    lrwxrwxrwx.   1 root root    7 Jan 20  2022 lib -> usr/lib
-    lrwxrwxrwx.   1 root root    9 Jan 20  2022 lib64 -> usr/lib64
-    drwx------.   2 root root    6 Jul 19 07:48 lost+found
-    drwxr-xr-x.   2 root root    6 Jan 20  2022 media
-    drwxr-xr-x.   2 root root    6 Jan 20  2022 mnt
+    total 12
+    dr-xr-xr-x.   2 root root    6 Jan 19  2023 afs
+    lrwxrwxrwx.   1 root root    7 Jan 19  2023 bin -> usr/bin
+    dr-xr-xr-x.   2 root root    6 Jan 19  2023 boot
+    drwxr-xr-x.   5 root root  340 Oct 17 07:53 dev
+    drwxr-xr-x.  44 root root 4096 Oct  6 06:48 etc
+    drwxr-xr-x.   2 root root    6 Jan 19  2023 home
+    lrwxrwxrwx.   1 root root    7 Jan 19  2023 lib -> usr/lib
+    lrwxrwxrwx.   1 root root    9 Jan 19  2023 lib64 -> usr/lib64
     ...
     ~~~
 
 ## **Using Seccomp Profiles on OpenShift**
 
-At this point we have a valid seccomp profile, how can we get it added to OpenShift and start using it in our workloads? - Let's see.
+At this point we have a valid seccomp profile, how can we get it added to OpenShift and start using it in our workloads? Let's see.
 
 ### **Using the Seccomp profile in a workload**
 
@@ -118,7 +119,7 @@ At this point we have a valid seccomp profile, how can we get it added to OpenSh
         storage:
           files:
           - contents:
-              source: data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0VSUk5PIiwKICAiYXJjaGl0ZWN0dXJlcyI6IFsKICAgICJTQ01QX0FSQ0hfWDg2XzY0IgogIF0sCiAgInN5c2NhbGxzIjogWwogICAgewogICAgICAibmFtZXMiOiBbCiAgICAgICAgImFjY2VzcyIsCiAgICAgICAgImFyY2hfcHJjdGwiLAogICAgICAgICJicmsiLAogICAgICAgICJjYXBnZXQiLAogICAgICAgICJjYXBzZXQiLAogICAgICAgICJjaGRpciIsCiAgICAgICAgImNsb3NlIiwKICAgICAgICAiZHVwMyIsCiAgICAgICAgImVwb2xsX2N0bCIsCiAgICAgICAgImVwb2xsX3B3YWl0IiwKICAgICAgICAiZXhlY3ZlIiwKICAgICAgICAiZXhpdF9ncm91cCIsCiAgICAgICAgImZjaGRpciIsCiAgICAgICAgImZjaG93biIsCiAgICAgICAgImZjbnRsIiwKICAgICAgICAiZnN0YXQiLAogICAgICAgICJmc3RhdGZzIiwKICAgICAgICAiZnV0ZXgiLAogICAgICAgICJnZXRkZW50czY0IiwKICAgICAgICAiZ2V0cGlkIiwKICAgICAgICAiZ2V0cHBpZCIsCiAgICAgICAgImdldHJhbmRvbSIsCiAgICAgICAgImlvY3RsIiwKICAgICAgICAibW1hcCIsCiAgICAgICAgIm1vdW50IiwKICAgICAgICAibXByb3RlY3QiLAogICAgICAgICJtdW5tYXAiLAogICAgICAgICJuYW5vc2xlZXAiLAogICAgICAgICJuZXdmc3RhdGF0IiwKICAgICAgICAib3BlbmF0IiwKICAgICAgICAicGlwZTIiLAogICAgICAgICJwaXZvdF9yb290IiwKICAgICAgICAicHJjdGwiLAogICAgICAgICJwcmVhZDY0IiwKICAgICAgICAicHJsaW1pdDY0IiwKICAgICAgICAicmVhZCIsCiAgICAgICAgInJzZXEiLAogICAgICAgICJydF9zaWdyZXR1cm4iLAogICAgICAgICJzZWNjb21wIiwKICAgICAgICAic2V0X3JvYnVzdF9saXN0IiwKICAgICAgICAic2V0X3RpZF9hZGRyZXNzIiwKICAgICAgICAic2V0Z2lkIiwKICAgICAgICAic2V0Z3JvdXBzIiwKICAgICAgICAic2V0aG9zdG5hbWUiLAogICAgICAgICJzZXR1aWQiLAogICAgICAgICJzdGF0ZnMiLAogICAgICAgICJzdGF0eCIsCiAgICAgICAgInRna2lsbCIsCiAgICAgICAgInVtYXNrIiwKICAgICAgICAidW1vdW50MiIsCiAgICAgICAgIndyaXRlIgogICAgICBdLAogICAgICAiYWN0aW9uIjogIlNDTVBfQUNUX0FMTE9XIiwKICAgICAgImFyZ3MiOiBbXSwKICAgICAgImNvbW1lbnQiOiAiIiwKICAgICAgImluY2x1ZGVzIjoge30sCiAgICAgICJleGNsdWRlcyI6IHt9CiAgICB9CiAgXQp9Cg==
+              source: data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0VSUk5PIiwKICAiYXJjaGl0ZWN0dXJlcyI6IFsKICAgICJTQ01QX0FSQ0hfWDg2XzY0IgogIF0sCiAgInN5c2NhbGxzIjogWwogICAgewogICAgICAibmFtZXMiOiBbCiAgICAgICAgImFjY2VzcyIsCiAgICAgICAgImFyY2hfcHJjdGwiLAogICAgICAgICJicmsiLAogICAgICAgICJjYXBnZXQiLAogICAgICAgICJjYXBzZXQiLAogICAgICAgICJjaGRpciIsCiAgICAgICAgImNsb3NlIiwKICAgICAgICAiZHVwMyIsCiAgICAgICAgImVwb2xsX2N0bCIsCiAgICAgICAgImVwb2xsX3B3YWl0IiwKICAgICAgICAiZXhlY3ZlIiwKICAgICAgICAiZXhpdF9ncm91cCIsCiAgICAgICAgImZhY2Nlc3NhdDIiLAogICAgICAgICJmY2hkaXIiLAogICAgICAgICJmY250bCIsCiAgICAgICAgImZzdGF0IiwKICAgICAgICAiZnN0YXRmcyIsCiAgICAgICAgImZ1dGV4IiwKICAgICAgICAiZ2V0ZGVudHM2NCIsCiAgICAgICAgImdldHBpZCIsCiAgICAgICAgImdldHBwaWQiLAogICAgICAgICJnZXRyYW5kb20iLAogICAgICAgICJpb2N0bCIsCiAgICAgICAgIm1tYXAiLAogICAgICAgICJtb3VudCIsCiAgICAgICAgIm1wcm90ZWN0IiwKICAgICAgICAibXVubWFwIiwKICAgICAgICAibmFub3NsZWVwIiwKICAgICAgICAibmV3ZnN0YXRhdCIsCiAgICAgICAgIm9wZW5hdCIsCiAgICAgICAgInBpcGUyIiwKICAgICAgICAicGl2b3Rfcm9vdCIsCiAgICAgICAgInByY3RsIiwKICAgICAgICAicHJlYWQ2NCIsCiAgICAgICAgInBybGltaXQ2NCIsCiAgICAgICAgInJlYWQiLAogICAgICAgICJyc2VxIiwKICAgICAgICAicnRfc2lncmV0dXJuIiwKICAgICAgICAic2V0X3JvYnVzdF9saXN0IiwKICAgICAgICAic2V0X3RpZF9hZGRyZXNzIiwKICAgICAgICAic2V0Z2lkIiwKICAgICAgICAic2V0Z3JvdXBzIiwKICAgICAgICAic2V0aG9zdG5hbWUiLAogICAgICAgICJzZXR1aWQiLAogICAgICAgICJzdGF0ZnMiLAogICAgICAgICJzdGF0eCIsCiAgICAgICAgInRna2lsbCIsCiAgICAgICAgInVtYXNrIiwKICAgICAgICAidW1vdW50MiIsCiAgICAgICAgIndyaXRlIgogICAgICBdLAogICAgICAiYWN0aW9uIjogIlNDTVBfQUNUX0FMTE9XIiwKICAgICAgImFyZ3MiOiBbXSwKICAgICAgImNvbW1lbnQiOiAiIiwKICAgICAgImluY2x1ZGVzIjoge30sCiAgICAgICJleGNsdWRlcyI6IHt9CiAgICB9CiAgXQp9Cg==
             mode: 420
             overwrite: true
             path: /var/lib/kubelet/seccomp/seccomp-ls.json
@@ -209,7 +210,7 @@ At this point we have a valid seccomp profile, how can we get it added to OpenSh
               type: Localhost
               localhostProfile: seccomp-ls.json
           containers:
-          - image: quay.io/fedora/fedora:36
+          - image: quay.io/fedora/fedora:38
             name: seccomp-ls-test
             command: ["ls", "/"]
           dnsPolicy: ClusterFirst
@@ -235,7 +236,7 @@ At this point we have a valid seccomp profile, how can we get it added to OpenSh
         spec:
           serviceAccountName: testuser
           containers:
-          - image: quay.io/fedora/fedora:36
+          - image: quay.io/fedora/fedora:38
             name: seccomp-ls-test
             command: ["ls", "/"]
             securityContext:
@@ -269,7 +270,7 @@ At this point we have a valid seccomp profile, how can we get it added to OpenSh
         spec:
           serviceAccountName: testuser
           containers:
-          - image: quay.io/fedora/fedora:36
+          - image: quay.io/fedora/fedora:38
             name: seccomp-lsl-test
             command: ["ls", "-l", "/"]
             securityContext:
@@ -304,7 +305,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     > **NOTE**: Below patch changes `"defaultAction": "SCMP_ACT_ERRNO"` to `"defaultAction": "SCMP_ACT_LOG"` in our policy.
 
     ~~~sh
-    oc patch mc 99-seccomp-profile-ls -p '{"spec":{"config":{"storage":{"files":[{"contents":{"source":"data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0xPRyIsCiAgImFyY2hpdGVjdHVyZXMiOiBbCiAgICAiU0NNUF9BUkNIX1g4Nl82NCIKICBdLAogICJzeXNjYWxscyI6IFsKICAgIHsKICAgICAgIm5hbWVzIjogWwogICAgICAgICJhY2Nlc3MiLAogICAgICAgICJhcmNoX3ByY3RsIiwKICAgICAgICAiYnJrIiwKICAgICAgICAiY2FwZ2V0IiwKICAgICAgICAiY2Fwc2V0IiwKICAgICAgICAiY2hkaXIiLAogICAgICAgICJjbG9zZSIsCiAgICAgICAgImR1cDMiLAogICAgICAgICJlcG9sbF9jdGwiLAogICAgICAgICJlcG9sbF9wd2FpdCIsCiAgICAgICAgImV4ZWN2ZSIsCiAgICAgICAgImV4aXRfZ3JvdXAiLAogICAgICAgICJmY2hkaXIiLAogICAgICAgICJmY2hvd24iLAogICAgICAgICJmY250bCIsCiAgICAgICAgImZzdGF0IiwKICAgICAgICAiZnN0YXRmcyIsCiAgICAgICAgImZ1dGV4IiwKICAgICAgICAiZ2V0ZGVudHM2NCIsCiAgICAgICAgImdldHBpZCIsCiAgICAgICAgImdldHBwaWQiLAogICAgICAgICJnZXRyYW5kb20iLAogICAgICAgICJpb2N0bCIsCiAgICAgICAgIm1tYXAiLAogICAgICAgICJtb3VudCIsCiAgICAgICAgIm1wcm90ZWN0IiwKICAgICAgICAibXVubWFwIiwKICAgICAgICAibmFub3NsZWVwIiwKICAgICAgICAibmV3ZnN0YXRhdCIsCiAgICAgICAgIm9wZW5hdCIsCiAgICAgICAgInBpcGUyIiwKICAgICAgICAicGl2b3Rfcm9vdCIsCiAgICAgICAgInByY3RsIiwKICAgICAgICAicHJlYWQ2NCIsCiAgICAgICAgInBybGltaXQ2NCIsCiAgICAgICAgInJlYWQiLAogICAgICAgICJyc2VxIiwKICAgICAgICAicnRfc2lncmV0dXJuIiwKICAgICAgICAic2VjY29tcCIsCiAgICAgICAgInNldF9yb2J1c3RfbGlzdCIsCiAgICAgICAgInNldF90aWRfYWRkcmVzcyIsCiAgICAgICAgInNldGdpZCIsCiAgICAgICAgInNldGdyb3VwcyIsCiAgICAgICAgInNldGhvc3RuYW1lIiwKICAgICAgICAic2V0dWlkIiwKICAgICAgICAic3RhdGZzIiwKICAgICAgICAic3RhdHgiLAogICAgICAgICJ0Z2tpbGwiLAogICAgICAgICJ1bWFzayIsCiAgICAgICAgInVtb3VudDIiLAogICAgICAgICJ3cml0ZSIKICAgICAgXSwKICAgICAgImFjdGlvbiI6ICJTQ01QX0FDVF9BTExPVyIsCiAgICAgICJhcmdzIjogW10sCiAgICAgICJjb21tZW50IjogIiIsCiAgICAgICJpbmNsdWRlcyI6IHt9LAogICAgICAiZXhjbHVkZXMiOiB7fQogICAgfQogIF0KfQo="},"mode":420,"overwrite":true,"path":"/var/lib/kubelet/seccomp/seccomp-ls.json"}]}}}}' --type merge
+    oc patch mc 99-seccomp-profile-ls -p '{"spec":{"config":{"storage":{"files":[{"contents":{"source":"data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0xPRyIsCiAgImFyY2hpdGVjdHVyZXMiOiBbCiAgICAiU0NNUF9BUkNIX1g4Nl82NCIKICBdLAogICJzeXNjYWxscyI6IFsKICAgIHsKICAgICAgIm5hbWVzIjogWwogICAgICAgICJhY2Nlc3MiLAogICAgICAgICJhcmNoX3ByY3RsIiwKICAgICAgICAiYnJrIiwKICAgICAgICAiY2FwZ2V0IiwKICAgICAgICAiY2Fwc2V0IiwKICAgICAgICAiY2hkaXIiLAogICAgICAgICJjbG9zZSIsCiAgICAgICAgImR1cDMiLAogICAgICAgICJlcG9sbF9jdGwiLAogICAgICAgICJlcG9sbF9wd2FpdCIsCiAgICAgICAgImV4ZWN2ZSIsCiAgICAgICAgImV4aXRfZ3JvdXAiLAogICAgICAgICJmYWNjZXNzYXQyIiwKICAgICAgICAiZmNoZGlyIiwKICAgICAgICAiZmNudGwiLAogICAgICAgICJmc3RhdCIsCiAgICAgICAgImZzdGF0ZnMiLAogICAgICAgICJmdXRleCIsCiAgICAgICAgImdldGRlbnRzNjQiLAogICAgICAgICJnZXRwaWQiLAogICAgICAgICJnZXRwcGlkIiwKICAgICAgICAiZ2V0cmFuZG9tIiwKICAgICAgICAiaW9jdGwiLAogICAgICAgICJtbWFwIiwKICAgICAgICAibW91bnQiLAogICAgICAgICJtcHJvdGVjdCIsCiAgICAgICAgIm11bm1hcCIsCiAgICAgICAgIm5hbm9zbGVlcCIsCiAgICAgICAgIm5ld2ZzdGF0YXQiLAogICAgICAgICJvcGVuYXQiLAogICAgICAgICJwaXBlMiIsCiAgICAgICAgInBpdm90X3Jvb3QiLAogICAgICAgICJwcmN0bCIsCiAgICAgICAgInByZWFkNjQiLAogICAgICAgICJwcmxpbWl0NjQiLAogICAgICAgICJyZWFkIiwKICAgICAgICAicnNlcSIsCiAgICAgICAgInJ0X3NpZ3JldHVybiIsCiAgICAgICAgInNldF9yb2J1c3RfbGlzdCIsCiAgICAgICAgInNldF90aWRfYWRkcmVzcyIsCiAgICAgICAgInNldGdpZCIsCiAgICAgICAgInNldGdyb3VwcyIsCiAgICAgICAgInNldGhvc3RuYW1lIiwKICAgICAgICAic2V0dWlkIiwKICAgICAgICAic3RhdGZzIiwKICAgICAgICAic3RhdHgiLAogICAgICAgICJ0Z2tpbGwiLAogICAgICAgICJ1bWFzayIsCiAgICAgICAgInVtb3VudDIiLAogICAgICAgICJ3cml0ZSIKICAgICAgXSwKICAgICAgImFjdGlvbiI6ICJTQ01QX0FDVF9BTExPVyIsCiAgICAgICJhcmdzIjogW10sCiAgICAgICJjb21tZW50IjogIiIsCiAgICAgICJpbmNsdWRlcyI6IHt9LAogICAgICAiZXhjbHVkZXMiOiB7fQogICAgfQogIF0KfQo="},"mode":420,"overwrite":true,"path":"/var/lib/kubelet/seccomp/seccomp-ls.json"}]}}}}' --type merge
     ~~~
 
 2. We need to wait for the new profile to be deployed on the nodes, when the updated profile is ready, we can run the pod again:
@@ -318,7 +319,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     spec:
       serviceAccountName: testuser
       containers:
-      - image: quay.io/fedora/fedora:36
+      - image: quay.io/fedora/fedora:38
         name: seccomp-lsl-test
         command: ["ls", "-l", "/"]
         securityContext:
@@ -339,23 +340,23 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
         # Get the node that executed the pod
         POD_NODE=$(oc -n ${NAMESPACE} get pod seccomp-lsl-test-2 -o jsonpath='{.spec.nodeName}')
         # Get the audit log from that node and filter by comm="ls"
-        oc adm node-logs ${POD_NODE} --path='audit/audit.log' | grep 'comm="ls"'
+        oc adm node-logs ${POD_NODE} --path='audit/audit.log' | grep "type=SECCOMP" | grep 'comm="ls"'
         ~~~
 
     2. Get the audit logs for your container
 
         ~~~sh
         <OUTPUT_OMITTED>
-        type=SECCOMP msg=audit(1612433809.320:166): auid=4294967295 uid=1000660000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c5,c26 pid=4849 comm="ls" exe="/usr/bin/coreutils" sig=0 arch=c000003e syscall=192 compat=0 ip=0x7fe33721ad5e code=0x7ffc0000AUID="unset" UID="unknown(1000660000)" GID="root" ARCH=x86_64 SYSCALL=lgetxattr
-        type=SECCOMP msg=audit(1612433809.320:167): auid=4294967295 uid=1000660000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c5,c26 pid=4849 comm="ls" exe="/usr/bin/coreutils" sig=0 arch=c000003e syscall=191 compat=0 ip=0x7fe33721acfe code=0x7ffc0000AUID="unset" UID="unknown(1000660000)" GID="root" ARCH=x86_64 SYSCALL=getxattr
-        type=SECCOMP msg=audit(1612433809.320:168): auid=4294967295 uid=1000660000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c5,c26 pid=4849 comm="ls" exe="/usr/bin/coreutils" sig=0 arch=c000003e syscall=191 compat=0 ip=0x7fe33721acfe code=0x7ffc0000AUID="unset" UID="unknown(1000660000)" GID="root" ARCH=x86_64 SYSCALL=getxattr
-        type=SECCOMP msg=audit(1612433809.339:169): auid=4294967295 uid=1000660000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c5,c26 pid=4849 comm="ls" exe="/usr/bin/coreutils" sig=0 arch=c000003e syscall=8 compat=0 ip=0x7fe33720d94b code=0x7ffc0000AUID="unset" UID="unknown(1000660000)" GID="root" ARCH=x86_64 SYSCALL=lseek
+        type=SECCOMP msg=audit(1697548121.930:685): auid=4294967295 uid=1000740000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c19,c27 pid=10980 comm="ls" exe="/usr/bin/ls" sig=0 arch=c000003e syscall=192 compat=0 ip=0x7f9103ccbe4e code=0x7ffc0000AUID="unset" UID="unknown(1000740000)" GID="root" ARCH=x86_64 SYSCALL=lgetxattr
+        type=SECCOMP msg=audit(1697548121.930:686): auid=4294967295 uid=1000740000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c19,c27 pid=10980 comm="ls" exe="/usr/bin/ls" sig=0 arch=c000003e syscall=191 compat=0 ip=0x7f9103ccbdee code=0x7ffc0000AUID="unset" UID="unknown(1000740000)" GID="root" ARCH=x86_64 SYSCALL=getxattr
+        type=SECCOMP msg=audit(1697548121.930:687): auid=4294967295 uid=1000740000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c19,c27 pid=10980 comm="ls" exe="/usr/bin/ls" sig=0 arch=c000003e syscall=191 compat=0 ip=0x7f9103ccbdee code=0x7ffc0000AUID="unset" UID="unknown(1000740000)" GID="root" ARCH=x86_64 SYSCALL=getxattr
+        type=SECCOMP msg=audit(1697548121.931:688): auid=4294967295 uid=1000740000 gid=0 ses=4294967295 subj=system_u:system_r:container_t:s0:c19,c27 pid=10980 comm="ls" exe="/usr/bin/ls" sig=0 arch=c000003e syscall=8 compat=0 ip=0x7f9103cbf1eb code=0x7ffc0000AUID="unset" UID="unknown(1000740000)" GID="root" ARCH=x86_64 SYSCALL=lseek
         ~~~
 
-    3. With the id from the `msg` (1612433809 in this case), get all the audit lines and filter by syscall removing duplicates
+    3. With the id from the `msg` (1697548121 in this case), get all the audit lines and filter by syscall removing duplicates
 
         ~~~sh
-        oc adm node-logs ${POD_NODE} --path='audit/audit.log' | grep 1612433809 | awk -F "SYSCALL=" '{print $2}' | sort -u
+        oc adm node-logs ${POD_NODE} --path='audit/audit.log' | grep 1697548121 | grep "type=SECCOMP" | awk -F "SYSCALL=" '{print $2}' | sort -u
         ~~~
 
         ~~~sh
@@ -372,7 +373,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     > **NOTE**: We are adding the required syscalls and on top of that we changed back the **defaultAction** from _SCMP_ACT_LOG_ to _SCMP_ACT_ERRNO_.
 
     ~~~sh
-    oc patch mc 99-seccomp-profile-ls -p '{"spec":{"config":{"storage":{"files":[{"contents":{"source":"data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0VSUk5PIiwKICAiYXJjaGl0ZWN0dXJlcyI6IFsKICAgICJTQ01QX0FSQ0hfWDg2XzY0IgogIF0sCiAgInN5c2NhbGxzIjogWwogICAgewogICAgICAibmFtZXMiOiBbCiAgICAgICAgImFjY2VzcyIsCiAgICAgICAgImFyY2hfcHJjdGwiLAogICAgICAgICJicmsiLAogICAgICAgICJjYXBnZXQiLAogICAgICAgICJjYXBzZXQiLAogICAgICAgICJjaGRpciIsCiAgICAgICAgImNsb3NlIiwKICAgICAgICAiZHVwMyIsCiAgICAgICAgImVwb2xsX2N0bCIsCiAgICAgICAgImVwb2xsX3B3YWl0IiwKICAgICAgICAiZXhlY3ZlIiwKICAgICAgICAiZXhpdF9ncm91cCIsCiAgICAgICAgImZjaGRpciIsCiAgICAgICAgImZjaG93biIsCiAgICAgICAgImZjbnRsIiwKICAgICAgICAiZnN0YXQiLAogICAgICAgICJmc3RhdGZzIiwKICAgICAgICAiZnV0ZXgiLAogICAgICAgICJnZXRkZW50czY0IiwKICAgICAgICAiZ2V0cGlkIiwKICAgICAgICAiZ2V0cHBpZCIsCiAgICAgICAgImdldHJhbmRvbSIsCiAgICAgICAgImlvY3RsIiwKICAgICAgICAibW1hcCIsCiAgICAgICAgIm1vdW50IiwKICAgICAgICAibXByb3RlY3QiLAogICAgICAgICJtdW5tYXAiLAogICAgICAgICJuYW5vc2xlZXAiLAogICAgICAgICJuZXdmc3RhdGF0IiwKICAgICAgICAib3BlbmF0IiwKICAgICAgICAicGlwZTIiLAogICAgICAgICJwaXZvdF9yb290IiwKICAgICAgICAicHJjdGwiLAogICAgICAgICJwcmVhZDY0IiwKICAgICAgICAicHJsaW1pdDY0IiwKICAgICAgICAicmVhZCIsCiAgICAgICAgInJzZXEiLAogICAgICAgICJydF9zaWdyZXR1cm4iLAogICAgICAgICJzZWNjb21wIiwKICAgICAgICAic2V0X3JvYnVzdF9saXN0IiwKICAgICAgICAic2V0X3RpZF9hZGRyZXNzIiwKICAgICAgICAic2V0Z2lkIiwKICAgICAgICAic2V0Z3JvdXBzIiwKICAgICAgICAic2V0aG9zdG5hbWUiLAogICAgICAgICJzZXR1aWQiLAogICAgICAgICJzdGF0ZnMiLAogICAgICAgICJzdGF0eCIsCiAgICAgICAgInRna2lsbCIsCiAgICAgICAgInVtYXNrIiwKICAgICAgICAidW1vdW50MiIsCiAgICAgICAgIndyaXRlIiwKICAgICAgICAiZ2V0eGF0dHIiLAogICAgICAgICJsZ2V0eGF0dHIiLAogICAgICAgICJsc2VlayIsCiAgICAgICAgInJlYWRsaW5rIgogICAgICBdLAogICAgICAiYWN0aW9uIjogIlNDTVBfQUNUX0FMTE9XIiwKICAgICAgImFyZ3MiOiBbXSwKICAgICAgImNvbW1lbnQiOiAiIiwKICAgICAgImluY2x1ZGVzIjoge30sCiAgICAgICJleGNsdWRlcyI6IHt9CiAgICB9CiAgXQp9Cg=="},"mode":420,"overwrite":true,"path":"/var/lib/kubelet/seccomp/seccomp-ls.json"}]}}}}' --type merge
+    oc patch mc 99-seccomp-profile-ls -p '{"spec":{"config":{"storage":{"files":[{"contents":{"source":"data:text/plain;charset=utf-8;base64,ewogICJkZWZhdWx0QWN0aW9uIjogIlNDTVBfQUNUX0VSUk5PIiwKICAiYXJjaGl0ZWN0dXJlcyI6IFsKICAgICJTQ01QX0FSQ0hfWDg2XzY0IgogIF0sCiAgInN5c2NhbGxzIjogWwogICAgewogICAgICAibmFtZXMiOiBbCiAgICAgICAgImFjY2VzcyIsCiAgICAgICAgImFyY2hfcHJjdGwiLAogICAgICAgICJicmsiLAogICAgICAgICJjYXBnZXQiLAogICAgICAgICJjYXBzZXQiLAogICAgICAgICJjaGRpciIsCiAgICAgICAgImNsb3NlIiwKICAgICAgICAiZHVwMyIsCiAgICAgICAgImVwb2xsX2N0bCIsCiAgICAgICAgImVwb2xsX3B3YWl0IiwKICAgICAgICAiZXhlY3ZlIiwKICAgICAgICAiZXhpdF9ncm91cCIsCiAgICAgICAgImZhY2Nlc3NhdDIiLAogICAgICAgICJmY2hkaXIiLAogICAgICAgICJmY250bCIsCiAgICAgICAgImZzdGF0IiwKICAgICAgICAiZnN0YXRmcyIsCiAgICAgICAgImZ1dGV4IiwKICAgICAgICAiZ2V0ZGVudHM2NCIsCiAgICAgICAgImdldHBpZCIsCiAgICAgICAgImdldHBwaWQiLAogICAgICAgICJnZXRyYW5kb20iLAogICAgICAgICJpb2N0bCIsCiAgICAgICAgIm1tYXAiLAogICAgICAgICJtb3VudCIsCiAgICAgICAgIm1wcm90ZWN0IiwKICAgICAgICAibXVubWFwIiwKICAgICAgICAibmFub3NsZWVwIiwKICAgICAgICAibmV3ZnN0YXRhdCIsCiAgICAgICAgIm9wZW5hdCIsCiAgICAgICAgInBpcGUyIiwKICAgICAgICAicGl2b3Rfcm9vdCIsCiAgICAgICAgInByY3RsIiwKICAgICAgICAicHJlYWQ2NCIsCiAgICAgICAgInBybGltaXQ2NCIsCiAgICAgICAgInJlYWQiLAogICAgICAgICJyc2VxIiwKICAgICAgICAicnRfc2lncmV0dXJuIiwKICAgICAgICAic2V0X3JvYnVzdF9saXN0IiwKICAgICAgICAic2V0X3RpZF9hZGRyZXNzIiwKICAgICAgICAic2V0Z2lkIiwKICAgICAgICAic2V0Z3JvdXBzIiwKICAgICAgICAic2V0aG9zdG5hbWUiLAogICAgICAgICJzZXR1aWQiLAogICAgICAgICJzdGF0ZnMiLAogICAgICAgICJzdGF0eCIsCiAgICAgICAgInRna2lsbCIsCiAgICAgICAgInVtYXNrIiwKICAgICAgICAidW1vdW50MiIsCiAgICAgICAgIndyaXRlIiwKICAgICAgICAiZ2V0eGF0dHIiLAogICAgICAgICJsZ2V0eGF0dHIiLAogICAgICAgICJsc2VlayIsCiAgICAgICAgInJlYWRsaW5rIgogICAgICBdLAogICAgICAiYWN0aW9uIjogIlNDTVBfQUNUX0FMTE9XIiwKICAgICAgImFyZ3MiOiBbXSwKICAgICAgImNvbW1lbnQiOiAiIiwKICAgICAgImluY2x1ZGVzIjoge30sCiAgICAgICJleGNsdWRlcyI6IHt9CiAgICB9CiAgXQp9Cg=="},"mode":420,"overwrite":true,"path":"/var/lib/kubelet/seccomp/seccomp-ls.json"}]}}}}' --type merge
     ~~~
 
 5. Let's execute the pod now and see the result:
@@ -386,7 +387,7 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
     spec:
       serviceAccountName: testuser
       containers:
-      - image: quay.io/fedora/fedora:36
+      - image: quay.io/fedora/fedora:38
         name: seccomp-lsl-test
         command: ["ls", "-l", "/"]
         securityContext:
@@ -433,27 +434,20 @@ On top of the action applied to a set of syscalls, we can define a _defaultActio
 
 ### **Using the Security Profiles Operator**
 
-So far we have seen how to create seccomp profiles using the oci hook or by changing the profile to audit mode. In this section we're going to introduce the [Security Profiles Operator](https://github.com/kubernetes-sigs/security-profiles-operator), an operator that help us manage the seccomp profiles in our cluster and that can also be used to create seccomp profiles out of a given workload.
+So far we have seen how to create seccomp profiles using the oci hook or by changing the profile to audit mode. In this section we're going to introduce the [Security Profiles Operator](https://docs.openshift.com/container-platform/4.14/security/security_profiles_operator/spo-understanding.html), an operator that helps us manage the seccomp profiles in our cluster and that can also be used to create seccomp profiles out of a given workload.
 
 Following the last example in the previous section, we will deploy the Security profiles Operator and create a recording for the ping workload.
 
-There are multiple ways to deploy the operator, we will use the manual approach. You can read more about installation [here](https://github.com/kubernetes-sigs/security-profiles-operator/blob/main/installation-usage.md)
+You can get the operator deployed by following the [official docs](https://docs.openshift.com/container-platform/4.14/security/security_profiles_operator/spo-enabling.html). The operator is based in this [upstream project](https://github.com/kubernetes-sigs/security-profiles-operator/).
 
-1. Deploy the Operator:
-
-    ~~~sh
-    oc apply -f https://raw.githubusercontent.com/kubernetes-sigs/security-profiles-operator/v0.4.3/deploy/operator.yaml
-    oc -n security-profiles-operator wait --for condition=ready pod -l name=security-profiles-operator
-    oc -n security-profiles-operator wait --for condition=ready pod -l name=security-profiles-operator-webhook
-    oc -n security-profiles-operator wait --for condition=ready pod -l name=spod
-    ~~~
+1. Deploy the Operator following the docs.
 
 2. Enable the log enricher to enable profile recording using the logs recorder:
 
     ~~~sh
     # If the patch below fails saying server doesn't have a resource type spod, wait a bit and run again the patch
-    oc -n security-profiles-operator patch spod spod --type=merge -p '{"spec":{"enableLogEnricher":true}}'
-    oc -n security-profiles-operator wait --for condition=ready pod -l name=spod
+    oc -n openshift-security-profiles patch spod spod --type=merge -p '{"spec":{"enableLogEnricher":true}}'
+    oc -n openshift-security-profiles wait --for condition=ready pod -l name=spod
     ~~~
 
 3. Now that we have the operator running, let's remove the ping pod from the previous section:
@@ -462,7 +456,13 @@ There are multiple ways to deploy the operator, we will use the manual approach.
     oc -n ${NAMESPACE} delete pod seccomp-ping-test
     ~~~
 
-4. Let's create a recording for our application:
+4. We need to enable recording in our namespace:
+
+    ~~~sh
+    oc label ns ${NAMESPACE} spo.x-k8s.io/enable-recording=true
+    ~~~
+
+5. Let's create a recording for our application:
 
     > **NOTE**: We need to use the matchLabels selector to read the syscalls used by pods using this label.
 
@@ -481,7 +481,7 @@ There are multiple ways to deploy the operator, we will use the manual approach.
     EOF
     ~~~
 
-5. Now that we have the recording created, let's create the ping workload:
+6. Now that we have the recording created, let's create the ping workload:
 
     > **NOTE**: We're creating the workload without any seccomp profile assigned.
 
@@ -505,7 +505,7 @@ There are multiple ways to deploy the operator, we will use the manual approach.
     EOF
     ~~~
 
-6. The profile recording should be targeting our workload:
+7. The profile recording should be targeting our workload:
 
     ~~~sh
     oc -n ${NAMESPACE} get profilerecording ping -o jsonpath='{.status}' | jq
@@ -519,7 +519,7 @@ There are multiple ways to deploy the operator, we will use the manual approach.
     }
     ~~~
 
-7. Now that our workload is completed we can delete the ping pod:
+8. Now that our workload is completed we can delete the ping pod:
 
     > **NOTE**: When creating a profile for a workload, make sure that you go thought all the possible scenarios handled by your app, otherwise you may miss some syscalls required for your app to work.
 
@@ -527,26 +527,25 @@ There are multiple ways to deploy the operator, we will use the manual approach.
     oc -n ${NAMESPACE} delete pod seccomp-ping-test
     ~~~
 
-8. The operator handles the installation of the seccomp profile, let's check the profiles available in the cluster:
+9. The operator handles the installation of the seccomp profile, let's check the profiles available in the cluster:
 
     ~~~sh
     oc get seccompprofile -A
     ~~~
 
     ~~~sh
-    NAMESPACE                    NAME                     STATUS      AGE
-    security-profiles-operator   log-enricher-trace       Installed   14m
-    security-profiles-operator   nginx-1.19.1             Installed   14m
-    test-seccomp                 ping-seccomp-ping-test   Installed   2m50s
+    NAMESPACE                     NAME                     STATUS      AGE
+    openshift-security-profiles   log-enricher-trace       Installed   6m15s
+    test-seccomp                  ping-seccomp-ping-test   Installed   3m52s
     ~~~
 
-9. We have the `ping-seccomp-ping-test` installed. One cool feature of the operator is that it handles the installation of new profiles without having to add them to a MachineConfig and wait for the nodes to reboot. We can delete the recording now:
+10. We have the `ping-seccomp-ping-test` installed. One cool feature of the operator is that it handles the installation of new profiles without having to add them to a MachineConfig and wait for the nodes to reboot. We can delete the recording now:
 
     ~~~sh
     oc -n ${NAMESPACE} delete profilerecording ping
     ~~~
 
-10. Let's use the new profile in our workload:
+11. Let's use the new profile in our workload:
 
     1. We need to allow the usage of this new seccomp profile in our SCC:
 

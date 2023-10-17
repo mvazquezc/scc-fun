@@ -1,18 +1,22 @@
 # **Pod Security Admission**
 
-In these demos we are going to show how Pod Security Admission (PSA) is configured in OCP 4.11 and what options you have as an admin to manage the Pod Security Standards configured for your namespaces.
+In these demos we are going to show how Pod Security Admission (PSA) is configured in OCP 4.14 and what options you have as an admin to manage the Pod Security Standards configured for your namespaces.
 
 These demos expect you to already know what PSA is and how it's used, you can refer to the official docs, or read [this blog](https://linuxera.org/working-with-pod-security-standards/).
 
 ## **Hands-on Demo 1**
 
-In OCP 4.11 we have the PSA admission configured to apply the following standards to all namespaces (excluding the ones starting by openshift-*):
+In OCP 4.14 we have the PSA admission configured to apply the following standards to all namespaces (excluding the ones starting by openshift-*):
 
-* Enforce: `none`
+* Enforce: `privileged`
 * Audit: `restricted`
 * Warn: `restricted`
 
-This will change on OCP 4.12, where Enforce will move from `none` to `restricted`.
+You can get the current configuration on your cluster by running the following command:
+
+~~~sh
+oc -n openshift-kube-apiserver get $(oc -n openshift-kube-apiserver get cm -o name| grep ^configmap/config | sort -V | tail -1) -o jsonpath='{.data.config\.yaml}' | jq '.admission.pluginConfig.PodSecurity.configuration.defaults'
+~~~
 
 When we create a namespace these are the labels we will find related to PSA:
 
@@ -41,29 +45,19 @@ When we try to create a workload that won't be allowed by the restricted PSA we 
 
 1. Create a workload violating the restricted Pod Security Standard (PSS):
 
+    > **NOTE**: In recent OCP versions the SCC mutation controller will add the required securityContext for Pods created via workload objects like Deployments to match the `restricted` PSA. That's why we create a Pod directly, so you can see the warning.
+
     ~~~sh
     cat <<EOF | oc -n test-psa apply -f -
-    apiVersion: apps/v1
-    kind: Deployment
+    apiVersion: v1
+    kind: Pod
     metadata:
-      labels:
-        app: go-app
       name: go-app
     spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: go-app
-      strategy: {}
-      template:
-        metadata:
-          labels:
-            app: go-app
-        spec:
-          containers:
-          - image: quay.io/mavazque/reversewords:latest
-            name: reversewords
-            resources: {}
+      containers:
+        - image: quay.io/mavazque/reversewords:latest
+          name: reversewords
+          resources: {}
     EOF
     ~~~
 
@@ -79,46 +73,33 @@ We can see that above workload violates the restricted PSS because:
 * It doesn't set the `runAsNonRoot: true` in its security context.
 * It doesn't set the default seccomp profile in its security context.
 
-In order to be compliant with the `restricted` PSS we need to change the deployment to something like this:
+In order to be compliant with the `restricted` PSS we need to change the Pod to something like this:
 
 ~~~sh
 cat <<EOF | oc -n test-psa apply -f -
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Pod
 metadata:
-  labels:
-    app: go-app
-  name: go-app
+  name: go-app-2
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: go-app
-  strategy: {}
-  template:
-    metadata:
-      labels:
-        app: go-app
-    spec:
-      containers:
-      - image: quay.io/mavazque/reversewords:latest
-        name: reversewords
-        resources: {}
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-          runAsNonRoot: true
-          runAsUser: 1024
-          seccompProfile:
-            type: RuntimeDefault
+  containers:
+    - image: quay.io/mavazque/reversewords:latest
+      name: reversewords
+      resources: {}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
 EOF
 ~~~
 
 ## **Hands-on Demo 2**
 
-In OCP a new controller has been developed to synchronize the Pod Security Standards configured in a namespace with the SCCs available to workloads in that namespace. In OCP 4.11 this controller modifies the `warn` and `audit` modes. On OCP 4.12 it will also modify the `enforce` mode.
+In OCP a new controller has been developed to synchronize the Pod Security Standards configured in a namespace with the SCCs available to workloads in that namespace. In OCP 4.14 this controller modifies the `warn` and `audit` modes. In future OCP releases it will also modify the `enforce` mode.
 
 The way this controller works is by introspecting the service account permissions to use SCCs and maps these SCCs to Pod Security Standards. Based on the SCC configuration the controller will set the value of the different PSA modes that allow the workloads to run in the namespace without triggering warnings or audit logs.
 
@@ -138,7 +119,7 @@ We will see how this controller works and how we can disable it for some of our 
     oc get namespace psa-auto-modes -o yaml | grep pod-security
     ~~~
 
-    > **NOTE**: We got the default values configured for OCP 4.11
+    > **NOTE**: We got the default values configured for OCP 4.14
 
     ~~~sh
     pod-security.kubernetes.io/audit: restricted

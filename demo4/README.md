@@ -165,8 +165,8 @@ In this demo we will see a few `RunAsUser` strategies we can configure.
     ~~~sh
     status:
     <OUTPUT_OMITTED>
-      - lastTransitionTime: "2021-02-11T18:08:50Z"
-        lastUpdateTime: "2021-02-11T18:08:50Z"
+      - lastTransitionTime: "2023-10-16T16:51:57Z"
+        lastUpdateTime: "2023-10-16T16:51:57Z"
         message: 'pods "reversewords-app-79d8dbf889-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.runAsUser: Invalid value: 5000: must be in the ranges: [1000650000, 1000659999] spec.containers[0].securityContext.runAsUser: Invalid value: 5000: must be in the ranges: [1000650000, 1000659999]]'
         reason: FailedCreate
         status: "True"
@@ -412,7 +412,7 @@ In this demo we will mount a pv inside a pod, and we will see how the different 
         ~~~
 
         ~~~sh
-        drwxrwsrwt. 3 root 6005 117 Feb 12 11:03 /mnt/
+        drwxrwsrwt. 3 root 6005 117 Oct 16 16:55 /mnt/
         ~~~
 
     2. When we create a file it gets created with our UID and GID:
@@ -424,8 +424,8 @@ In this demo we will mount a pv inside a pod, and we will see how the different 
 
         ~~~sh
         total 0
-        drwxrws---. 3 root 6005 17 Aug 29 08:10 systemd-private-414e21477db845be86e56ad8384b5e2a-chronyd.service-XmJJW1
-        -rw-rw-rw-. 1 1024 6005  0 Aug 29 15:07 testfile
+        drwxrws---. 3 root 6005 17 Oct 16 14:59 systemd-private-5b22965e6b564f98b7705a6915a3416d-chronyd.service-Ti8KQF
+        -rw-r--r--. 1 1024 6005  0 Oct 16 16:55 testfile
         ~~~
 
 8. We mentioned that `FSGroup` chowns the content in the volume, let's try to change the group used to run our pod:
@@ -457,7 +457,7 @@ In this demo we will mount a pv inside a pod, and we will see how the different 
         ~~~
 
         ~~~sh
-        drwxrwsrwt. 3 root 7000 133 Feb 12 11:25 /mnt/
+        drwxrwsrwt. 5 root 7000 4096 Oct 16 16:55 /mnt/
         ~~~
 
     2. The same happens for files that already existed:
@@ -468,8 +468,8 @@ In this demo we will mount a pv inside a pod, and we will see how the different 
 
         ~~~sh
         total 0
-        drwxrws---. 3 root 7000 17 Aug 29 08:10 systemd-private-414e21477db845be86e56ad8384b5e2a-chronyd.service-XmJJW1
-        -rw-rw-rw-. 1 1024 7000  0 Aug 29 15:07 testfile
+        drwxrws---. 3 root 7000 17 Oct 16 14:59 systemd-private-5b22965e6b564f98b7705a6915a3416d-chronyd.service-Ti8KQF
+        -rw-rw-r--. 1 1024 7000  0 Oct 16 16:55 testfile
         ~~~
 
 **SupplementalGroups**
@@ -662,7 +662,7 @@ In this demo we will mount a PV inside a pod, and we will see how the different 
         ~~~
 
         ~~~sh
-        drwxrwsr-x. 1 5000 5000 26 Feb 16 19:03 /mnt/
+        drwxrwsr-x. 1 5000 5000 26 Feb 16  2021 /mnt/
         ~~~
 
     2. When we create a file it gets created with our UID and the GID from the folder (remember the SETGID):
@@ -674,8 +674,8 @@ In this demo we will mount a PV inside a pod, and we will see how the different 
 
         ~~~sh
         total 4
-        -rw-rw----. 1 5000 5000 38 Feb 16 18:26 testfile.txt
-        -rw-rw-rw-. 1 1024 5000  0 Aug 29 15:10 testfile2
+        -rw-rw----. 1 5000 5000 38 Feb 16  2021 testfile.txt
+        -rw-r--r--. 1 1024 5000  0 Oct 16 16:59 testfile2
         ~~~
 
 6. If this volume was a shared storage being mounted by multiple pods, since the supplementalGroup will be set to the owner of the shared storage, then all pods will write with their own UIDs but still have access to files created by other pods.
@@ -697,8 +697,6 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 ~~~
 
 1. Now, let's create a deployment called selinux-app without configuring any `SeLinuxContext` and which uses our restricted-runasuser SCC, where `SELinuxContext` is set to MustRunAs.
-
-    > **NOTE**: The application that we are deploying is composed by two containers. Each container runs a netcat binary listening on a different port. This is important, since as they are sharing the pod, they cannot listen on the same port.
 
     ~~~sh
     cat <<EOF | oc -n ${NAMESPACE} create --as=system:serviceaccount:${NAMESPACE}:testuser -f -
@@ -723,17 +721,11 @@ openshift.io/sa.scc.mcs: s0:c27,c9
         spec:
           serviceAccountName: testuser
           containers:
-          - image: quay.io/alosadag/nc
+          - image: quay.io/mavazque/trbsht:latest
             name: nc1
-            env:
-            - name: PORT
-              value: "8081"
             resources: {} 
-          - image: quay.io/alosadag/nc
+          - image: quay.io/mavazque/trbsht:latest
             name: nc2
-            env:
-            - name: PORT
-              value: "8082"
             resources: {}
     status: {}
     EOF
@@ -747,7 +739,7 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
     ~~~sh
     NAME                           READY   STATUS    RESTARTS   AGE
-    selinux-app-7bc9dc5777-9krwj   2/2     Running   0          15s
+    selinux-app-6996d479cb-vwtvv   2/2     Running   0          8s
     ~~~
 
 3. Check that the MCS assigned to the pod is the default one assigned to the namespace where the application is running:
@@ -758,7 +750,7 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
     ~~~sh
     NAME                                APPLIED MCS
-    selinux-app-7bc9dc5777-9krwj        s0:c27,c9
+    selinux-app-6996d479cb-vwtvv        s0:c27,c14
     ~~~
 
     1. The SELinux context assigned to the parent pid of each container is also the same one:
@@ -769,7 +761,7 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
         ~~~sh
         LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-        system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8081
+        system_u:system_r:container_t:s0:c14,c27 1024  1  0.0  0.0   2468   900 ?        Ss   17:03   0:00 sleep infinity
         ~~~
 
         ~~~sh
@@ -778,7 +770,7 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
         ~~~sh
         LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-        system_u:system_r:container_t:s0:c9,c27 3000   1  0.0  0.0  24724  2440 ?        Ss   13:08   0:00 /usr/bin/nc -v -klp 8082
+        system_u:system_r:container_t:s0:c14,c27 1024  1  0.0  0.0   2468   960 ?        Ss   17:03   0:00 sleep infinity
         ~~~
 
     2. This can be verified at the node level as well. See that the pod label can be seen either from the container or from the host where it is running. First, find the node where the pod is running and then connect and check the SELinux context assigned:
@@ -790,12 +782,12 @@ openshift.io/sa.scc.mcs: s0:c27,c9
         oc debug node/${POD_NODE}
         # Chroot and grep for the NC processes
         chroot /host
-        ps axufZ | grep "/usr/bin/nc -v -klp 808"
+        ps axufZ | grep "c14,c27" | grep "sleep"
         ~~~
 
         ~~~sh
-        system_u:system_r:container_t:s0:c9,c27 3000 3074874 0.0  0.0 24724 2440 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8081
-        system_u:system_r:container_t:s0:c9,c27 3000 3074967 0.0  0.0 24724 2436 ?       Ss   13:08   0:00  \_ /usr/bin/nc -v -klp 8082
+        system_u:system_r:container_t:s0:c14,c27 1024 176415 0.0  0.0 2468  900 ?        Ss   17:03   0:00  \_ sleep infinity
+        system_u:system_r:container_t:s0:c14,c27 1024 176471 0.0  0.0 2468  960 ?        Ss   17:03   0:00  \_ sleep infinity
         ~~~
 
 4. Ok, so now let's imagine we have a security requirement to have both containers as much isolated as possible from each other. We can assign a different SELinux MCS to each one.
@@ -826,9 +818,9 @@ openshift.io/sa.scc.mcs: s0:c27,c9
         status:
           conditions:
           <OUTPUT_OMITTED>
-            - lastTransitionTime: "2021-02-19T18:42:19Z"
-              lastUpdateTime: "2021-02-19T18:42:19Z"
-              message: 'pods "selinux-app-6575fb4fff-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9 spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c9]'
+            - lastTransitionTime: "2023-10-16T17:07:22Z"
+              lastUpdateTime: "2023-10-16T17:07:22Z"
+              message: 'pods "selinux-app-8947dfdbc-" is forbidden: unable to validate against any security context constraint: [spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c14 spec.containers[0].securityContext.seLinuxOptions.level: Invalid value: "s0:c123,c456": must be s0:c27,c14]'
         <OUTPUT_OMITTED>
         ~~~
 
@@ -846,7 +838,7 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
     ~~~sh
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-    system_u:system_r:container_t:s0:c123,c456 1000720+ 1 0.0  0.0 24724 2396 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8081
+    system_u:system_r:container_t:s0:c123,c456 1024 1 0.0  0.0   2468   992 ?        Ss   17:08   0:00 sleep infinity
     ~~~
 
     ~~~sh
@@ -855,5 +847,5 @@ openshift.io/sa.scc.mcs: s0:c27,c9
 
     ~~~sh
     LABEL                           USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
-    system_u:system_r:container_t:s0:c478,c821 1000720+ 1 0.0  0.0 24724 2388 ?      Ss   13:31   0:00 /usr/bin/nc -v -klp 8082
+    system_u:system_r:container_t:s0:c533,c936 1024 1 0.0  0.0   2468   936 ?        Ss   17:08   0:00 sleep infinity
     ~~~
